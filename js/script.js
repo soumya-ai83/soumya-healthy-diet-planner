@@ -7,7 +7,8 @@ Project Codename: Project Jatibaba
 const STORAGE = {
   meals: "soumyaHealthyDietMeals",
   recipes: "soumyaHealthyDietRecipes",
-  settings: "soumyaHealthyDietSettings"
+  settings: "soumyaHealthyDietSettings",
+  weightHistory: "soumyaHealthyDietWeightHistory"
 };
 
 const defaultSettings = {
@@ -20,6 +21,7 @@ const defaultSettings = {
 let applicationSettings = loadJson(STORAGE.settings, defaultSettings);
 let savedMeals = loadJson(STORAGE.meals, []);
 let savedRecipes = loadJson(STORAGE.recipes, recipeDatabase);
+let weightHistory = loadJson(STORAGE.weightHistory, []);
 let currentMealItems = [];
 let ingredientRowCounter = 0;
 let toastTimer;
@@ -78,6 +80,7 @@ function saveAll() {
   localStorage.setItem(STORAGE.meals, JSON.stringify(savedMeals));
   localStorage.setItem(STORAGE.recipes, JSON.stringify(savedRecipes));
   localStorage.setItem(STORAGE.settings, JSON.stringify(applicationSettings));
+  localStorage.setItem(STORAGE.weightHistory, JSON.stringify(weightHistory));
 }
 
 function showMessage(message) {
@@ -88,6 +91,38 @@ function showMessage(message) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2800);
 }
 
+function clearFieldError(field) {
+  if (!field) return;
+  field.classList.remove("field-error");
+  field.removeAttribute("aria-invalid");
+  const error = field.parentElement?.querySelector(".field-error-message");
+  if (error) error.remove();
+}
+
+function setFieldError(field, message) {
+  if (!field) return;
+  clearFieldError(field);
+  field.classList.add("field-error");
+  field.setAttribute("aria-invalid", "true");
+  const error = document.createElement("div");
+  error.className = "field-error-message";
+  error.textContent = message;
+  field.insertAdjacentElement("afterend", error);
+}
+
+function focusFirstInvalid(field) {
+  if (!field) return;
+  field.scrollIntoView({ behavior: "smooth", block: "center" });
+  window.setTimeout(() => field.focus({ preventScroll: true }), 250);
+}
+
+document.addEventListener("input", event => {
+  if (event.target.matches("input, select, textarea") && String(event.target.value).trim()) clearFieldError(event.target);
+});
+document.addEventListener("change", event => {
+  if (event.target.matches("input, select, textarea") && String(event.target.value).trim()) clearFieldError(event.target);
+});
+
 // Header and greeting
 $("current-date").textContent = today.toLocaleDateString("en-US", {
   weekday: "long", year: "numeric", month: "long", day: "numeric"
@@ -96,6 +131,8 @@ const hour = today.getHours();
 $("greeting").textContent = `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, Soumya`;
 $("meal-date").value = todayForInput;
 $("history-date").value = todayForInput;
+$("weight-date").value = todayForInput;
+$("weight-value").value = applicationSettings.currentWeight;
 
 // Navigation
 function openPage(pageName) {
@@ -127,6 +164,13 @@ function openDialog(id, entryType) {
     if (entryType) selectEntryType(entryType);
   }
   if (id === "recipe-dialog" && $("ingredients-container").children.length === 0) createIngredientRow();
+  if (id === "weight-dialog") {
+    $("weight-date").value = todayForInput;
+    const todayRecord = weightHistory.find(record => record.date === todayForInput);
+    $("weight-value").value = todayRecord?.weight ?? applicationSettings.currentWeight;
+    clearFieldError($("weight-date"));
+    clearFieldError($("weight-value"));
+  }
   dialog.showModal();
 }
 
@@ -167,6 +211,7 @@ function calculateCurrentMealTotal() {
 
 function addItemToCurrentMeal(item) {
   currentMealItems.push(item);
+  clearFieldError($("current-meal-items"));
   renderCurrentMeal();
   showMessage(`${item.name} added to the current meal.`);
 }
@@ -247,9 +292,29 @@ $("cancel-meal-button").addEventListener("click", () => {
 $("save-meal-button").addEventListener("click", () => {
   const date = $("meal-date").value;
   const mealType = $("meal-type").value;
-  if (!date) return showMessage("Please select the meal date.");
-  if (!mealType) return showMessage("Please select the meal type.");
-  if (!currentMealItems.length) return showMessage("Please add at least one item.");
+  const invalid = [];
+  clearFieldError($("meal-date"));
+  clearFieldError($("meal-type"));
+  clearFieldError($("current-meal-items"));
+  if (!date) {
+    setFieldError($("meal-date"), "Meal date is required.");
+    invalid.push({ field: $("meal-date"), label: "meal date" });
+  }
+  if (!mealType) {
+    setFieldError($("meal-type"), "Meal type is required.");
+    invalid.push({ field: $("meal-type"), label: "meal type" });
+  }
+  if (!currentMealItems.length) {
+    const mealItems = $("current-meal-items");
+    mealItems.tabIndex = -1;
+    setFieldError(mealItems, "Add at least one meal item.");
+    invalid.push({ field: mealItems, label: "meal items" });
+  }
+  if (invalid.length) {
+    showMessage(`Please correct: ${invalid.map(item => item.label).join(", ")}.`);
+    focusFirstInvalid(invalid[0].field);
+    return;
+  }
   savedMeals.push({
     id: createUniqueId("meal"), date, mealType, items: structuredCloneSafe(currentMealItems),
     totalCalories: calculateCurrentMealTotal(), savedAt: new Date().toISOString()
@@ -346,7 +411,7 @@ function createIngredientRow(seed = {}) {
     <div class="form-group"><label>Quantity</label><input type="number" class="ingredient-quantity-input" min="0" step="0.01" inputmode="decimal" placeholder="150" value="${seed.quantity || ""}"></div>
     <div class="form-group"><label>Unit</label><select class="ingredient-unit-input"><option value="g">g</option><option value="ml">ml</option><option value="tsp">tsp</option><option value="tbsp">tbsp</option><option value="piece">piece</option></select></div>
     <div class="form-group"><label>Total Calories</label><input class="ingredient-total-input" type="number" readonly value="0"><div class="ingredient-reference ingredient-status"></div></div>
-    <button type="button" class="remove-ingredient-button">Remove</button>
+    <button type="button" class="remove-ingredient-button" aria-label="Delete ingredient" title="Delete ingredient">Delete Ingredient</button>
     <div class="manual-reference"><div class="form-group"><label>Reference Calories</label><input type="number" class="manual-calories" min="0" step="0.01" placeholder="77"></div><div class="form-group"><label>Reference Amount</label><input type="number" class="manual-amount" min="0" step="0.01" placeholder="100"></div><div class="form-group"><label>Reference Unit</label><select class="manual-unit"><option value="g">g</option><option value="ml">ml</option><option value="tsp">tsp</option><option value="tbsp">tbsp</option><option value="piece">piece</option></select></div></div>`;
   ingredientsContainer.appendChild(row);
   row.querySelector(".ingredient-unit-input").value = seed.unit || "g";
@@ -385,6 +450,7 @@ function updateIngredientRow(row) {
   }
   row.querySelector(".ingredient-total-input").value = Math.round(calories);
   statusText.textContent = calories > 0 ? `${formatCalories(calories)} calculated` : statusText.textContent;
+  if (calories > 0) clearFieldError(ingredientsContainer);
   calculateRecipeNutrition();
 }
 
@@ -416,10 +482,33 @@ $("save-new-recipe-button").addEventListener("click", () => {
   const foodType = $("food-type").value;
   const category = $("recipe-category").value.trim();
   const nutrition = calculateRecipeNutrition();
-  if (!name) return showMessage("Please enter a recipe name.");
-  if (!foodType) return showMessage("Please select a food type.");
-  if (!(nutrition.servings > 0)) return showMessage("Please enter valid servings.");
-  if (!(nutrition.total > 0)) return showMessage("Please add ingredients with calculated calories.");
+  const invalid = [];
+  clearFieldError($("new-recipe-name"));
+  clearFieldError($("food-type"));
+  clearFieldError($("total-servings"));
+  clearFieldError(ingredientsContainer);
+  if (!name) {
+    setFieldError($("new-recipe-name"), "Recipe name is required.");
+    invalid.push({ field: $("new-recipe-name"), label: "recipe name" });
+  }
+  if (!foodType) {
+    setFieldError($("food-type"), "Food type is required.");
+    invalid.push({ field: $("food-type"), label: "food type" });
+  }
+  if (!(nutrition.servings > 0)) {
+    setFieldError($("total-servings"), "Enter a valid number of servings.");
+    invalid.push({ field: $("total-servings"), label: "valid servings" });
+  }
+  if (!(nutrition.total > 0)) {
+    ingredientsContainer.tabIndex = -1;
+    setFieldError(ingredientsContainer, "Add at least one ingredient with calculated calories.");
+    invalid.push({ field: ingredientsContainer, label: "calculated ingredients" });
+  }
+  if (invalid.length) {
+    showMessage(`Please correct: ${invalid.map(item => item.label).join(", ")}.`);
+    focusFirstInvalid(invalid[0].field);
+    return;
+  }
   if (savedRecipes.some(recipe => normalize(recipe.name) === normalize(name))) return showMessage("A recipe with this name already exists.");
   const ingredients = $all(".ingredient-entry-row").map(row => ({
     name: row.querySelector(".ingredient-name-input").value.trim(),
@@ -466,17 +555,159 @@ function renderRecipeHandbook() {
   }));
 }
 
-// Progress
-function renderWeeklyProgress() {
-  const rows = [];
-  for (let offset = 6; offset >= 0; offset--) {
-    const date = new Date(); date.setHours(12,0,0,0); date.setDate(date.getDate() - offset);
-    const key = getLocalDateString(date);
-    const calories = calculateCaloriesForDate(key);
-    const pct = Math.min(calories / applicationSettings.dailyCalorieTarget * 100, 100);
-    rows.push(`<div class="week-row"><strong>${date.toLocaleDateString("en-US",{weekday:"short"})}<br><small>${formatDisplayDate(key,true)}</small></strong><div class="mini-track"><div class="mini-fill" style="width:${pct}%"></div></div><span>${formatCalories(calories)}</span></div>`);
+// Weight tracking
+$("save-weight-button").addEventListener("click", () => {
+  const date = $("weight-date").value;
+  const weight = Number($("weight-value").value);
+  const invalid = [];
+  clearFieldError($("weight-date"));
+  clearFieldError($("weight-value"));
+  if (!date) {
+    setFieldError($("weight-date"), "Weight date is required.");
+    invalid.push({ field: $("weight-date"), label: "weight date" });
   }
-  $("weekly-progress-list").innerHTML = rows.join("");
+  if (!(weight > 0)) {
+    setFieldError($("weight-value"), "Enter a valid weight.");
+    invalid.push({ field: $("weight-value"), label: "valid weight" });
+  }
+  if (invalid.length) {
+    showMessage(`Please correct: ${invalid.map(item => item.label).join(", ")}.`);
+    focusFirstInvalid(invalid[0].field);
+    return;
+  }
+
+  const existing = weightHistory.find(record => record.date === date);
+  if (existing) existing.weight = weight;
+  else weightHistory.push({ id: createUniqueId("weight"), date, weight });
+  weightHistory.sort((a, b) => a.date.localeCompare(b.date));
+
+  if (date === todayForInput) applicationSettings.currentWeight = weight;
+  saveAll();
+  populateSettings();
+  updateDashboard();
+  renderWeeklyProgress();
+  closeDialog("weight-dialog");
+  showMessage(existing ? "Weight record updated." : "Weight saved.");
+});
+
+// Progress charts
+function formatShortDate(dateString) {
+  return new Date(`${dateString}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function emptyChart(container, title, message) {
+  container.innerHTML = `<div class="chart-empty-state"><strong>${escapeHtml(title)}</strong>${escapeHtml(message)}</div>`;
+}
+
+function renderLineChart({ container, points, referenceValue, referenceLabel, valueLabel, tooltipFormatter, minimumY = null }) {
+  if (points.length < 2) {
+    emptyChart(container, "Not enough data yet", `Add ${points.length ? "one more record" : "at least two records"} to display this chart.`);
+    return;
+  }
+
+  const visiblePoints = points.slice(-14);
+  const width = 760;
+  const height = 300;
+  const margin = { top: 28, right: 26, bottom: 52, left: 58 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const values = [...visiblePoints.map(point => point.value), referenceValue];
+  let low = minimumY === null ? Math.min(...values) : Math.min(minimumY, ...values);
+  let high = Math.max(...values);
+  const spread = Math.max(high - low, Math.abs(high) * 0.08, 1);
+  low = minimumY === null ? Math.max(0, low - spread * 0.18) : minimumY;
+  high += spread * 0.18;
+
+  const x = index => margin.left + index * plotWidth / (visiblePoints.length - 1);
+  const y = value => margin.top + (high - value) / (high - low) * plotHeight;
+  const path = visiblePoints.map((point, index) => `${index ? "L" : "M"} ${x(index).toFixed(2)} ${y(point.value).toFixed(2)}`).join(" ");
+  const referenceY = y(referenceValue);
+  const labelEvery = Math.max(1, Math.ceil(visiblePoints.length / 7));
+  const gridLines = [0, 0.25, 0.5, 0.75, 1].map(fraction => {
+    const gridY = margin.top + plotHeight * fraction;
+    const gridValue = high - (high - low) * fraction;
+    return `<line class="chart-grid" x1="${margin.left}" y1="${gridY}" x2="${width - margin.right}" y2="${gridY}"></line><text class="chart-axis-label" x="${margin.left - 8}" y="${gridY + 4}" text-anchor="end">${Math.round(gridValue)}</text>`;
+  }).join("");
+  const dateLabels = visiblePoints.map((point, index) => {
+    if (index % labelEvery && index !== visiblePoints.length - 1) return "";
+    return `<text class="chart-axis-label" x="${x(index)}" y="${height - 18}" text-anchor="middle">${formatShortDate(point.date)}</text>`;
+  }).join("");
+  const pointMarkup = visiblePoints.map((point, index) => `
+    <g class="chart-interactive" data-index="${index}" tabindex="0" role="button" aria-label="${formatShortDate(point.date)}, ${point.value} ${valueLabel}">
+      <circle class="chart-hit-area" cx="${x(index)}" cy="${y(point.value)}" r="16"></circle>
+      <circle class="chart-point" cx="${x(index)}" cy="${y(point.value)}" r="5"></circle>
+    </g>`).join("");
+
+  container.innerHTML = `<div class="chart-wrap">
+    <svg class="progress-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${valueLabel} progress line chart">
+      ${gridLines}
+      <line class="chart-reference" x1="${margin.left}" y1="${referenceY}" x2="${width - margin.right}" y2="${referenceY}"></line>
+      <text class="chart-reference-label" x="${width - margin.right}" y="${Math.max(14, referenceY - 7)}" text-anchor="end">${escapeHtml(referenceLabel)}</text>
+      <path class="chart-line" d="${path}"></path>
+      ${dateLabels}
+      ${pointMarkup}
+    </svg>
+    <div class="chart-tooltip" role="status">Tap, click, or hover over a point for details.</div>
+  </div>`;
+
+  const tooltip = container.querySelector(".chart-tooltip");
+  container.querySelectorAll(".chart-interactive").forEach(element => {
+    const showDetails = () => {
+      const point = visiblePoints[Number(element.dataset.index)];
+      tooltip.innerHTML = tooltipFormatter(point);
+    };
+    element.addEventListener("mouseenter", showDetails);
+    element.addEventListener("click", showDetails);
+    element.addEventListener("focus", showDetails);
+    element.addEventListener("touchstart", showDetails, { passive: true });
+  });
+}
+
+function renderWeightChart() {
+  const points = weightHistory
+    .filter(record => record?.date && Number(record.weight) > 0)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(record => ({ date: record.date, value: Number(record.weight) }));
+  const goal = Number(applicationSettings.goalWeight);
+  renderLineChart({
+    container: $("weight-chart-container"),
+    points,
+    referenceValue: goal,
+    referenceLabel: `Goal ${goal} lb`,
+    valueLabel: "lb",
+    tooltipFormatter: point => {
+      const difference = point.value - goal;
+      const comparison = difference === 0 ? "At goal" : `${Math.abs(difference).toFixed(1)} lb ${difference > 0 ? "above" : "below"} goal`;
+      return `<strong>${formatDisplayDate(point.date)}</strong>${point.value.toFixed(1)} lb · ${comparison}`;
+    }
+  });
+}
+
+function renderCalorieChart() {
+  const totals = savedMeals.reduce((byDate, meal) => {
+    if (meal?.date) byDate[meal.date] = (byDate[meal.date] || 0) + Number(meal.totalCalories || 0);
+    return byDate;
+  }, {});
+  const points = Object.entries(totals).sort(([a], [b]) => a.localeCompare(b)).map(([date, value]) => ({ date, value }));
+  const target = Number(applicationSettings.dailyCalorieTarget);
+  renderLineChart({
+    container: $("calorie-chart-container"),
+    points,
+    referenceValue: target,
+    referenceLabel: `Target ${target.toLocaleString("en-US")} kcal`,
+    valueLabel: "kcal",
+    minimumY: 0,
+    tooltipFormatter: point => {
+      const difference = point.value - target;
+      const comparison = difference === 0 ? "At target" : `${Math.abs(Math.round(difference)).toLocaleString("en-US")} kcal ${difference > 0 ? "above" : "below"} target`;
+      return `<strong>${formatDisplayDate(point.date)}</strong>${Math.round(point.value).toLocaleString("en-US")} kcal consumed · Target ${target.toLocaleString("en-US")} kcal · ${comparison}`;
+    }
+  });
+}
+
+function renderWeeklyProgress() {
+  renderWeightChart();
+  renderCalorieChart();
 }
 
 // Settings
