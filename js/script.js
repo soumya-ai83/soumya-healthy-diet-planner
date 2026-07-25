@@ -61,7 +61,8 @@ function formatDisplayDate(dateString, compact = false) {
 }
 
 function formatCalories(value) {
-  return `${Math.round(Number(value) || 0).toLocaleString("en-US")} kcal`;
+  const numericValue = Number(value) || 0;
+  return `${numericValue.toLocaleString("en-US", { maximumFractionDigits: 2 })} kcal`;
 }
 
 function createUniqueId(prefix = "id") {
@@ -101,12 +102,12 @@ function normalizeRecipeRecord(recipe, index = 0) {
     totalServings: Number(normalized.totalServings) > 0 ? Number(normalized.totalServings) : 1,
     totalCalories: Number(normalized.totalCalories) || 0,
     caloriesPerServing: Number(normalized.caloriesPerServing) || 0,
-    totalProtein: Number(normalized.totalProtein) || 0,
-    proteinPerServing: Number(normalized.proteinPerServing) || 0,
+    totalProtein: normalized.totalProtein == null ? null : Number(normalized.totalProtein) || 0,
+    proteinPerServing: normalized.proteinPerServing == null ? null : Number(normalized.proteinPerServing) || 0,
     ingredients: Array.isArray(normalized.ingredients)
       ? normalized.ingredients.map(ingredient => ({
           name: String(ingredient?.name || "Unnamed ingredient").trim(),
-          quantity: Number(ingredient?.quantity) || 0,
+          quantity: ingredient?.quantity == null ? null : Number(ingredient.quantity) || 0,
           unit: String(ingredient?.unit || "").trim(),
           calories: Number(ingredient?.calories) || 0
         }))
@@ -387,7 +388,7 @@ $("add-recipe-item-button").addEventListener("click", () => {
   addItemToCurrentMeal({
     id: createUniqueId("mealitem"), source: "Measured", name: recipe.name,
     details: `${servings} serving${servings === 1 ? "" : "s"}`,
-    calories: Math.round(recipe.caloriesPerServing * servings)
+    calories: Number((recipe.caloriesPerServing * servings).toFixed(2))
   });
   $("recipe-selection").value = "";
   $("serving-amount").value = 1;
@@ -618,23 +619,36 @@ function bindMealActions(container) {
 
 // Recipe Builder
 const ingredientsContainer = $("ingredients-container");
-function normalize(value) { return String(value || "").trim().replace(/\s+/g, " ").toLowerCase(); }
+function normalize(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
 function findIngredient(name) {
   const query = normalize(name);
   return ingredientDatabase.find(item => normalize(item.name) === query || (item.aliases || []).some(alias => normalize(alias) === query));
 }
 
 function populateIngredientOptions() {
+  updateIngredientOptions("");
+}
+
+function updateIngredientOptions(searchText) {
+  const query = normalize(searchText);
   const uniqueNames = new Map();
   ingredientDatabase.forEach(item => {
-    [item.name, ...(item.aliases || [])].forEach(name => {
-      const cleaned = String(name || "").trim().replace(/\s+/g, " ");
-      const key = normalize(cleaned);
-      if (key && !uniqueNames.has(key)) uniqueNames.set(key, cleaned);
-    });
+    const searchableNames = [item.name, ...(item.aliases || [])];
+    if (query && !searchableNames.some(name => normalize(name).includes(query))) return;
+    const canonicalName = String(item.name || "").trim().replace(/\s+/g, " ");
+    const key = normalize(canonicalName);
+    if (key && !uniqueNames.has(key)) uniqueNames.set(key, canonicalName);
   });
   $("ingredient-options").innerHTML = [...uniqueNames.values()]
-    .sort((a, b) => a.localeCompare(b))
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
     .map(name => `<option value="${escapeHtml(name)}"></option>`)
     .join("");
 }
@@ -647,7 +661,7 @@ function createIngredientRow(seed = {}) {
   row.innerHTML = `
     <div class="form-group"><label>Ingredient</label><input class="ingredient-name-input" list="ingredient-options" placeholder="Example: Potato" value="${escapeHtml(seed.name || "")}"><div class="ingredient-reference">Start typing an ingredient.</div></div>
     <div class="form-group"><label>Quantity</label><input type="number" class="ingredient-quantity-input" min="0" step="0.01" inputmode="decimal" placeholder="150" value="${seed.quantity || ""}"></div>
-    <div class="form-group"><label>Unit</label><select class="ingredient-unit-input"><option value="g">g</option><option value="ml">ml</option><option value="tsp">tsp</option><option value="tbsp">tbsp</option><option value="piece">piece</option></select></div>
+    <div class="form-group"><label>Unit</label><select class="ingredient-unit-input"><option value="g">g</option><option value="ml">ml</option><option value="tsp">tsp</option><option value="tbsp">tbsp</option><option value="piece">piece</option><option value="unspecified">unspecified</option></select></div>
     <div class="form-group"><label>Total Calories</label><input class="ingredient-total-input" type="number" readonly value="0"><div class="ingredient-reference ingredient-status"></div></div>
     <button type="button" class="remove-ingredient-button" aria-label="Delete ingredient" title="Delete ingredient">Delete Ingredient</button>
     <div class="manual-reference"><div class="form-group"><label>Reference Calories</label><input type="number" class="manual-calories" min="0" step="0.01" placeholder="77"></div><div class="form-group"><label>Reference Amount</label><input type="number" class="manual-amount" min="0" step="0.01" placeholder="100"></div><div class="form-group"><label>Reference Unit</label><select class="manual-unit"><option value="g">g</option><option value="ml">ml</option><option value="tsp">tsp</option><option value="tbsp">tbsp</option><option value="piece">piece</option></select></div></div>`;
@@ -658,7 +672,10 @@ function createIngredientRow(seed = {}) {
     row.querySelector(".manual-amount").value = seed.quantity || 1;
     row.querySelector(".manual-unit").value = seed.unit || "g";
   }
-  ["input", "change"].forEach(eventName => row.addEventListener(eventName, () => updateIngredientRow(row)));
+  ["input", "change"].forEach(eventName => row.addEventListener(eventName, event => {
+    if (event.target.classList.contains("ingredient-name-input")) updateIngredientOptions(event.target.value);
+    updateIngredientRow(row);
+  }));
   row.querySelector(".remove-ingredient-button").addEventListener("click", () => {
     if (ingredientsContainer.children.length === 1) return showMessage("A recipe must contain at least one ingredient.");
     row.remove(); calculateRecipeNutrition();
@@ -677,10 +694,14 @@ function updateIngredientRow(row) {
   let calories = 0;
   if (known) {
     manual.classList.remove("active");
-    referenceText.textContent = `${known.referenceCalories} kcal / ${known.referenceAmount} ${known.referenceUnit}`;
-    const convertedQuantity = convertCompatibleUnit(quantity, unit, known.referenceUnit);
-    if (convertedQuantity !== null && quantity > 0) calories = convertedQuantity / known.referenceAmount * known.referenceCalories;
-    else if (quantity > 0) statusText.textContent = `Choose ${known.referenceUnit} for automatic calculation.`;
+    const unitReference = known.unitReferences?.[unit];
+    const referenceCalories = Number(unitReference?.calories ?? known.referenceCalories);
+    const referenceAmount = Number(unitReference?.amount ?? known.referenceAmount);
+    const referenceUnit = unitReference ? unit : known.referenceUnit;
+    referenceText.textContent = `${referenceCalories} kcal / ${referenceAmount} ${referenceUnit}`;
+    const convertedQuantity = convertCompatibleUnit(quantity, unit, referenceUnit);
+    if (convertedQuantity !== null && quantity > 0) calories = convertedQuantity / referenceAmount * referenceCalories;
+    else if (quantity > 0) statusText.textContent = `Choose ${referenceUnit} for automatic calculation.`;
   } else if (name.trim()) {
     manual.classList.add("active");
     referenceText.textContent = "Not found locally — enter a manual reference.";
@@ -898,7 +919,7 @@ function renderRecipeHandbook() {
     <div class="recipe-list-summary"><p class="recipe-result-count">Showing ${startNumber}–${endNumber} of ${recipes.length} recipes</p></div>
     <div class="recipe-list" role="table" aria-label="Saved recipes">
       <div class="recipe-list-header" role="row">
-        <span role="columnheader">Recipe</span><span role="columnheader">Category</span><span role="columnheader">Food Type</span><span role="columnheader">Calories / Serving</span><span role="columnheader">Servings</span><span role="columnheader">Action</span>
+        <span role="columnheader">Recipe</span><span role="columnheader">Category</span><span role="columnheader">Food Type</span><span role="columnheader">Calories / Serving</span><span role="columnheader">Action</span>
       </div>
       ${pageRecipes.map(recipe => `
         <div class="recipe-list-row" role="row">
@@ -906,15 +927,14 @@ function renderRecipeHandbook() {
           <span class="recipe-list-category" role="cell">${escapeHtml(recipe.category || "Uncategorized")}</span>
           <span class="recipe-list-food-type" role="cell">${escapeHtml(recipe.foodType || "Unspecified")}</span>
           <strong class="recipe-list-calories" role="cell">${formatCalories(recipe.caloriesPerServing)}<span> / serving</span></strong>
-          <span class="recipe-list-servings" role="cell">${recipe.totalServings}</span>
           <div class="recipe-list-action" role="cell"><button class="recipe-view-button" data-view-recipe="${recipe.id}">View <span aria-hidden="true">›</span></button></div>
         </div>`).join("")}
     </div>
-    <nav class="recipe-pagination" aria-label="Recipe pages">
+    ${totalPages > 1 ? `<nav class="recipe-pagination" aria-label="Recipe pages">
       <button class="secondary-button compact-button" data-recipe-page="previous" ${recipeHandbookPage === 1 ? "disabled" : ""}>Previous</button>
       <span>Page ${recipeHandbookPage} of ${totalPages}</span>
       <button class="secondary-button compact-button" data-recipe-page="next" ${recipeHandbookPage === totalPages ? "disabled" : ""}>Next</button>
-    </nav>`;
+    </nav>` : ""}`;
 
   container.querySelectorAll("[data-view-recipe]").forEach(button => button.addEventListener("click", () => showRecipeDetails(button.dataset.viewRecipe)));
   container.querySelectorAll("[data-recipe-page]").forEach(button => button.addEventListener("click", () => {
@@ -961,7 +981,7 @@ function showRecipeDetails(recipeId) {
   $("recipe-details-title").textContent = recipe.name;
   const ingredientsMarkup = Array.isArray(recipe.ingredients) && recipe.ingredients.length
     ? `<ul class="recipe-detail-ingredients">${recipe.ingredients.map(ingredient => `
-        <li class="recipe-detail-ingredient"><strong>${escapeHtml(ingredient.name)}</strong><span>${Number(ingredient.quantity).toLocaleString("en-US")} ${escapeHtml(ingredient.unit || "")}</span><span>${formatCalories(ingredient.calories)}</span></li>`).join("")}</ul>`
+        <li class="recipe-detail-ingredient"><strong>${escapeHtml(ingredient.name)}</strong><span>${ingredient.quantity == null ? "Quantity unspecified" : `${Number(ingredient.quantity).toLocaleString("en-US")} ${escapeHtml(ingredient.unit || "")}`}</span><span>${formatCalories(ingredient.calories)}</span></li>`).join("")}</ul>`
     : '<div class="older-recipe-message">Ingredient details are not available for this older recipe.</div>';
   $("recipe-details-content").innerHTML = `
     <div class="recipe-details-summary">
