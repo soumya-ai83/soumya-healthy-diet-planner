@@ -22,7 +22,9 @@ const defaultSettings = {
 
 let applicationSettings = normalizeSettings(loadJson(STORAGE.settings, defaultSettings));
 let savedMeals = normalizeMealCollection(loadJson(STORAGE.meals, []));
-let savedRecipes = normalizeRecipeCollection(loadJson(STORAGE.recipes, recipeDatabase));
+const starterRecipeMerge = mergeMissingStarterRecipes(loadJson(STORAGE.recipes, recipeDatabase));
+let savedRecipes = starterRecipeMerge.recipes;
+if (starterRecipeMerge.changed || !localStorage.getItem(STORAGE.recipes)) localStorage.setItem(STORAGE.recipes, JSON.stringify(savedRecipes));
 let weightHistory = normalizeWeightCollection(loadJson(STORAGE.weightHistory, []));
 let applicationMetadata = normalizeMetadata(loadJson(STORAGE.metadata, {}));
 let currentMealItems = [];
@@ -99,6 +101,8 @@ function normalizeRecipeRecord(recipe, index = 0) {
     totalServings: Number(normalized.totalServings) > 0 ? Number(normalized.totalServings) : 1,
     totalCalories: Number(normalized.totalCalories) || 0,
     caloriesPerServing: Number(normalized.caloriesPerServing) || 0,
+    totalProtein: Number(normalized.totalProtein) || 0,
+    proteinPerServing: Number(normalized.proteinPerServing) || 0,
     ingredients: Array.isArray(normalized.ingredients)
       ? normalized.ingredients.map(ingredient => ({
           name: String(ingredient?.name || "Unnamed ingredient").trim(),
@@ -112,6 +116,41 @@ function normalizeRecipeRecord(recipe, index = 0) {
 
 function normalizeRecipeCollection(recipes) {
   return (Array.isArray(recipes) ? recipes : recipeDatabase).map(normalizeRecipeRecord);
+}
+
+function isUntouchedLegacyVegetableSantula(recipe) {
+  return recipe?.id === "R001"
+    && String(recipe.name).trim().toLowerCase() === "vegetable santula"
+    && Number(recipe.totalCalories) === 509
+    && Number(recipe.caloriesPerServing) === 255
+    && !recipe.updatedAt
+    && !Array.isArray(recipe.ingredients);
+}
+
+function mergeMissingStarterRecipes(storedRecipes) {
+  const existing = normalizeRecipeCollection(storedRecipes);
+  const merged = [...existing];
+  let changed = false;
+
+  recipeDatabase.forEach(starter => {
+    const stableIdIndex = merged.findIndex(recipe => recipe.id === starter.id);
+    if (stableIdIndex >= 0) return;
+
+    const sameNameIndex = merged.findIndex(recipe => String(recipe.name).trim().replace(/\s+/g, " ").toLowerCase()
+      === String(starter.name).trim().replace(/\s+/g, " ").toLowerCase());
+    if (sameNameIndex >= 0) {
+      if (starter.id === "SR1017" && isUntouchedLegacyVegetableSantula(merged[sameNameIndex])) {
+        merged[sameNameIndex] = normalizeRecipeRecord(starter, sameNameIndex);
+        changed = true;
+      }
+      return;
+    }
+
+    merged.push(normalizeRecipeRecord(starter, merged.length));
+    changed = true;
+  });
+
+  return { recipes: merged, changed };
 }
 
 function normalizeMealItem(item, index = 0) {
@@ -639,7 +678,8 @@ function updateIngredientRow(row) {
   if (known) {
     manual.classList.remove("active");
     referenceText.textContent = `${known.referenceCalories} kcal / ${known.referenceAmount} ${known.referenceUnit}`;
-    if (unit === known.referenceUnit && quantity > 0) calories = quantity / known.referenceAmount * known.referenceCalories;
+    const convertedQuantity = convertCompatibleUnit(quantity, unit, known.referenceUnit);
+    if (convertedQuantity !== null && quantity > 0) calories = convertedQuantity / known.referenceAmount * known.referenceCalories;
     else if (quantity > 0) statusText.textContent = `Choose ${known.referenceUnit} for automatic calculation.`;
   } else if (name.trim()) {
     manual.classList.add("active");
@@ -656,6 +696,13 @@ function updateIngredientRow(row) {
   statusText.textContent = calories > 0 ? `${formatCalories(calories)} calculated` : statusText.textContent;
   if (calories > 0) clearFieldError(ingredientsContainer);
   calculateRecipeNutrition();
+}
+
+function convertCompatibleUnit(quantity, fromUnit, toUnit) {
+  if (fromUnit === toUnit) return quantity;
+  if (fromUnit === "tsp" && toUnit === "tbsp") return quantity / 3;
+  if (fromUnit === "tbsp" && toUnit === "tsp") return quantity * 3;
+  return null;
 }
 
 function calculateRecipeNutrition() {
@@ -1103,7 +1150,7 @@ function prepareImportedData(data) {
   if (!Array.isArray(data.weightHistory)) throw new Error("The backup does not contain a valid weight-history list.");
   return {
     meals: normalizeMealCollection(data.meals),
-    recipes: normalizeRecipeCollection(data.recipes),
+    recipes: mergeMissingStarterRecipes(data.recipes).recipes,
     settings: normalizeSettings(data.settings),
     weightHistory: normalizeWeightCollection(data.weightHistory),
     metadata: normalizeMetadata({ schemaVersion: version, importedAt: new Date().toISOString() })
