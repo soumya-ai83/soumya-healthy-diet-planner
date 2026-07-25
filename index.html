@@ -38,7 +38,7 @@
         <article class="summary-card"><span class="card-label">Daily Target</span><strong id="dashboard-target">1,900 kcal</strong><small>Your calorie goal</small></article>
         <article class="summary-card"><span class="card-label">Consumed</span><strong id="dashboard-consumed">0 kcal</strong><small>Recorded today</small></article>
         <article class="summary-card"><span class="card-label">Remaining</span><strong id="dashboard-remaining">1,900 kcal</strong><small>Available today</small></article>
-        <article class="summary-card"><span class="card-label">Current Weight</span><strong id="dashboard-weight">188 lb</strong><small id="dashboard-goal-weight">Goal: 170 lb</small></article>
+        <article class="summary-card weight-summary-card"><span class="card-label">Current Weight</span><strong id="dashboard-weight">188 lb</strong><small id="dashboard-goal-weight">Goal: 170 lb</small><button class="secondary-button compact-button update-weight-button" data-open-dialog="weight-dialog">Update Weight</button></article>
       </div>
 
       <article class="panel progress-panel">
@@ -75,8 +75,15 @@
     </section>
 
     <section id="progress" class="app-page">
-      <div class="page-heading"><div><h2>Progress</h2><p>A simple first-release overview of your recent calorie totals.</p></div></div>
-      <article class="panel"><div class="panel-heading"><div><h3>Last 7 Days</h3><p>Daily totals compared with your target.</p></div></div><div id="weekly-progress-list" class="weekly-progress-list"></div></article>
+      <div class="page-heading"><div><h2>Progress</h2><p>Review your weight and daily calorie trends.</p></div></div>
+      <article class="panel chart-panel">
+        <div class="panel-heading"><div><h3>Weight Progress</h3><p>Saved weights compared with your goal.</p></div></div>
+        <div id="weight-chart-container" class="chart-container" aria-live="polite"></div>
+      </article>
+      <article class="panel chart-panel">
+        <div class="panel-heading"><div><h3>Daily Calorie Progress</h3><p>Daily totals compared with your calorie target.</p></div></div>
+        <div id="calorie-chart-container" class="chart-container" aria-live="polite"></div>
+      </article>
     </section>
 
     <section id="settings" class="app-page">
@@ -109,9 +116,22 @@
       <header class="dialog-header"><div><span class="eyebrow">MASTER DATABASE</span><h2>Create New Recipe</h2><p>Build a measured recipe with automatic ingredient calculations.</p></div><button class="dialog-close" data-close-dialog="recipe-dialog" aria-label="Close">×</button></header>
       <div class="dialog-content">
         <div class="form-grid"><div class="form-group"><label for="new-recipe-name">Recipe Name</label><input id="new-recipe-name" type="text" placeholder="Example: Vegetable Santula"></div><div class="form-group"><label for="food-type">Food Type</label><select id="food-type"><option value="">Select type</option><option>Vegetarian</option><option>Egg</option><option>Chicken</option><option>Fish</option><option>Meat</option></select></div><div class="form-group"><label for="recipe-category">Category</label><input id="recipe-category" type="text" placeholder="Example: Vegetable Curry"></div><div class="form-group"><label for="total-servings">Total Servings</label><input id="total-servings" type="number" min="0.25" step="0.25" value="2"></div></div>
-        <section class="recipe-builder-section"><div class="panel-heading"><div><h3>Ingredients</h3><p>Known ingredients calculate automatically. Unknown items allow a manual calorie reference.</p></div><button class="secondary-button" id="add-ingredient-button">+ Ingredient</button></div><datalist id="ingredient-options"></datalist><div id="ingredients-container"></div></section>
+        <section class="recipe-builder-section"><div class="panel-heading"><div><h3>Ingredients</h3><p>Known ingredients calculate automatically. Unknown items allow a manual calorie reference.</p></div><button class="secondary-button" id="add-ingredient-button">+ Ingredient</button></div><datalist id="ingredient-options"></datalist><div class="ingredient-table-header" aria-hidden="true"><span>Ingredient</span><span>Quantity</span><span>Unit</span><span>Total Calories</span><span>Delete</span></div><div id="ingredients-container"></div></section>
         <section class="recipe-calculation"><div><span>Total Recipe Calories</span><strong id="recipe-total-calories">0 kcal</strong></div><div><span>Total Servings</span><strong id="recipe-total-servings-summary">2</strong></div><div><span>Calories per Serving</span><strong id="recipe-calories-per-serving">0 kcal</strong></div></section>
         <div class="button-row sticky-actions"><button class="secondary-button" id="ignore-new-recipe-button">Ignore</button><button class="primary-button" id="save-new-recipe-button">Add to Master Database</button></div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="weight-dialog" class="app-dialog compact-dialog">
+    <div class="dialog-shell">
+      <header class="dialog-header"><div><span class="eyebrow">PROGRESS</span><h2>Update Weight</h2><p>Save one weight record for a selected date.</p></div><button class="dialog-close" data-close-dialog="weight-dialog" aria-label="Close">×</button></header>
+      <div class="dialog-content">
+        <div class="form-grid">
+          <div class="form-group"><label for="weight-date">Date</label><input type="date" id="weight-date"></div>
+          <div class="form-group"><label for="weight-value">Weight (lb)</label><input type="number" id="weight-value" min="1" step="0.1" inputmode="decimal" placeholder="Example: 188"></div>
+        </div>
+        <div class="button-row sticky-actions"><button class="secondary-button" data-close-dialog="weight-dialog">Cancel</button><button class="primary-button" id="save-weight-button">Save Weight</button></div>
       </div>
     </div>
   </dialog>
