@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#176b52">
+  <title>Soumya Healthy Diet Planner</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-content">
+      <div>
+        <span class="eyebrow">PROJECT JATIBABA</span>
+        <h1>Soumya Healthy Diet Planner</h1>
+        <p>Healthy meals, practical tracking, steady progress.</p>
+      </div>
+      <div class="today-box"><span>Today</span><strong id="current-date">Loading…</strong></div>
+    </div>
+  </header>
+
+  <nav class="main-navigation" aria-label="Main navigation">
+    <button class="nav-button active" data-page="dashboard">Home</button>
+    <button class="nav-button" data-page="meal-history">History</button>
+    <button class="nav-button" data-page="recipe-handbook">Recipes</button>
+    <button class="nav-button" data-page="progress">Progress</button>
+    <button class="nav-button" data-page="settings">Settings</button>
+  </nav>
+
+  <main class="app-container">
+    <section id="dashboard" class="app-page active-page">
+      <div class="page-heading dashboard-heading">
+        <div><h2 id="greeting">Good morning, Soumya</h2><p>Your daily nutrition command center.</p></div>
+        <button class="secondary-button" id="today-button">Go to Today</button>
+      </div>
+
+      <div class="summary-grid">
+        <article class="summary-card"><span class="card-label">Daily Target</span><strong id="dashboard-target">1,900 kcal</strong><small>Your calorie goal</small></article>
+        <article class="summary-card"><span class="card-label">Consumed</span><strong id="dashboard-consumed">0 kcal</strong><small>Recorded today</small></article>
+        <article class="summary-card"><span class="card-label">Remaining</span><strong id="dashboard-remaining">1,900 kcal</strong><small>Available today</small></article>
+        <article class="summary-card"><span class="card-label">Current Weight</span><strong id="dashboard-weight">188 lb</strong><small id="dashboard-goal-weight">Goal: 170 lb</small></article>
+      </div>
+
+      <article class="panel progress-panel">
+        <div class="panel-heading"><div><h3>Daily Calorie Progress</h3><p>Consumed compared with your daily target.</p></div><strong id="dashboard-progress-text">0 / 1,900 kcal</strong></div>
+        <div class="progress-track"><div class="progress-fill" id="calorie-progress"></div></div>
+        <div class="progress-labels"><span>0 kcal</span><span id="dashboard-progress-target">1,900 kcal target</span></div>
+      </article>
+
+      <section class="quick-actions" aria-label="Quick actions">
+        <button class="action-card primary-action" data-open-dialog="meal-dialog"><span>🍽️</span><div><strong>Add Meal</strong><small>Recipe, manual food or Jatibaba estimate</small></div></button>
+        <button class="action-card" data-open-dialog="recipe-dialog"><span>📖</span><div><strong>Create New Recipe</strong><small>Calculate and save to your Master Database</small></div></button>
+      </section>
+
+      <div class="dashboard-layout">
+        <article class="panel">
+          <div class="panel-heading"><div><h3>Today's Meals</h3><p>Meals saved for today.</p></div><button class="secondary-button compact-button" data-open-dialog="meal-dialog">+ Add</button></div>
+          <div id="dashboard-meals-container"></div>
+        </article>
+        <article class="panel jatibaba-panel">
+          <div class="jatibaba-icon">🤖</div>
+          <div><h3>Jatibaba</h3><p>Use a meal photo or your own estimate when the food is not in your Recipe Handbook.</p><button class="primary-button" data-open-dialog="meal-dialog" data-entry="jatibaba">Estimate a Meal</button></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="meal-history" class="app-page">
+      <div class="page-heading"><div><h2>Meal History</h2><p>Review or delete previously recorded meals.</p></div></div>
+      <article class="panel"><div class="history-toolbar"><div class="form-group history-date-field"><label for="history-date">Select Date</label><input type="date" id="history-date"></div><div class="history-day-summary"><span>Daily Total</span><strong id="history-daily-total">0 kcal</strong></div></div><div id="meal-history-container"></div></article>
+    </section>
+
+    <section id="recipe-handbook" class="app-page">
+      <div class="page-heading"><div><h2>Recipe Handbook</h2><p>Your measured recipes and calorie calculations.</p></div><button class="primary-button" data-open-dialog="recipe-dialog">+ New Recipe</button></div>
+      <article class="panel"><div class="recipe-toolbar"><input id="recipe-search" type="search" placeholder="Search recipes…"></div><div id="recipe-handbook-container"></div></article>
+    </section>
+
+    <section id="progress" class="app-page">
+      <div class="page-heading"><div><h2>Progress</h2><p>A simple first-release overview of your recent calorie totals.</p></div></div>
+      <article class="panel"><div class="panel-heading"><div><h3>Last 7 Days</h3><p>Daily totals compared with your target.</p></div></div><div id="weekly-progress-list" class="weekly-progress-list"></div></article>
+    </section>
+
+    <section id="settings" class="app-page">
+      <div class="page-heading"><div><h2>Settings</h2><p>Manage your calorie target and weight goals.</p></div></div>
+      <article class="panel"><div class="form-grid"><div class="form-group"><label for="daily-calorie-target">Daily Calorie Target</label><input type="number" id="daily-calorie-target" min="500" step="50"></div><div class="form-group"><label for="current-weight">Current Weight</label><input type="number" id="current-weight" min="1" step="0.1"></div><div class="form-group"><label for="goal-weight">Goal Weight</label><input type="number" id="goal-weight" min="1" step="0.1"></div></div><div class="button-row"><button class="primary-button" id="save-settings-button">Save Settings</button></div></article>
+    </section>
+  </main>
+
+  <dialog id="meal-dialog" class="app-dialog">
+    <div class="dialog-shell">
+      <header class="dialog-header"><div><span class="eyebrow">QUICK ENTRY</span><h2>Add Meal</h2><p>Everything you need without leaving Home.</p></div><button class="dialog-close" data-close-dialog="meal-dialog" aria-label="Close">×</button></header>
+      <div class="dialog-content">
+        <div class="form-grid"><div class="form-group"><label for="meal-date">Date</label><input type="date" id="meal-date"></div><div class="form-group"><label for="meal-type">Meal Type</label><select id="meal-type"><option value="">Select meal type</option><option>Breakfast</option><option>Morning Snack</option><option>Lunch</option><option>Evening Snack</option><option>Dinner</option></select></div></div>
+        <h3 class="section-title">Choose Entry Type</h3>
+        <div class="entry-type-grid"><button class="entry-type-card active" data-entry-type="recipe"><span>📚</span><strong>Recipe</strong><small>From Handbook</small></button><button class="entry-type-card" data-entry-type="custom"><span>✏️</span><strong>Manual</strong><small>Food + calories</small></button><button class="entry-type-card" data-entry-type="jatibaba"><span>🤖</span><strong>Jatibaba</strong><small>Photo + estimate</small></button></div>
+
+        <section id="recipe-entry" class="entry-panel active-entry-panel"><div class="form-grid"><div class="form-group"><label for="recipe-selection">Select Recipe</label><select id="recipe-selection"><option value="">Choose a saved recipe</option></select></div><div class="form-group"><label for="serving-amount">Serving Amount</label><input type="number" id="serving-amount" min="0.25" step="0.25" value="1"></div></div><div class="button-row"><button class="primary-button" id="add-recipe-item-button">Add to Meal</button><button class="secondary-button" id="ignore-recipe-button">Clear</button></div></section>
+
+        <section id="custom-entry" class="entry-panel"><div class="form-grid"><div class="form-group"><label for="custom-food-name">Food Name</label><input type="text" id="custom-food-name" placeholder="Example: Apple"></div><div class="form-group"><label for="custom-food-calories">Calories</label><input type="number" id="custom-food-calories" min="0" inputmode="decimal" placeholder="Example: 95"></div></div><div class="button-row"><button class="primary-button" id="add-custom-item-button">Add to Meal</button><button class="secondary-button" id="ignore-custom-button">Clear</button></div></section>
+
+        <section id="jatibaba-entry" class="entry-panel"><div class="jatibaba-form-heading"><div class="jatibaba-icon">🤖</div><div><h3>Ask Jatibaba</h3><p>For Release 1, attach a reference photo and enter the estimated calories manually.</p></div></div><div class="form-grid"><div class="form-group"><label for="jatibaba-photo">Meal Photo (optional)</label><input type="file" id="jatibaba-photo" accept="image/*"><img id="jatibaba-preview" class="photo-preview" alt="Selected meal preview" hidden></div><div class="form-group"><label for="jatibaba-description">Meal Description</label><textarea id="jatibaba-description" rows="3" placeholder="Example: 3 roti, vegetable santula and omelet"></textarea></div><div class="form-group"><label for="jatibaba-calories">Estimated Total Calories</label><input type="number" id="jatibaba-calories" min="0" inputmode="decimal" placeholder="Example: 620"></div></div><div class="button-row"><button class="primary-button" id="add-jatibaba-item-button">Add Estimate</button><button class="secondary-button" id="ignore-jatibaba-button">Clear</button></div></section>
+
+        <section class="current-meal-panel"><div class="panel-heading"><div><h3>Current Meal</h3><p>Items added before saving.</p></div><strong id="current-meal-total">Meal Total: 0 kcal</strong></div><div id="current-meal-items"></div><div class="button-row sticky-actions"><button class="secondary-button" id="cancel-meal-button">Cancel</button><button class="primary-button" id="save-meal-button">Save Meal</button></div></section>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="recipe-dialog" class="app-dialog">
+    <div class="dialog-shell">
+      <header class="dialog-header"><div><span class="eyebrow">MASTER DATABASE</span><h2>Create New Recipe</h2><p>Build a measured recipe with automatic ingredient calculations.</p></div><button class="dialog-close" data-close-dialog="recipe-dialog" aria-label="Close">×</button></header>
+      <div class="dialog-content">
+        <div class="form-grid"><div class="form-group"><label for="new-recipe-name">Recipe Name</label><input id="new-recipe-name" type="text" placeholder="Example: Vegetable Santula"></div><div class="form-group"><label for="food-type">Food Type</label><select id="food-type"><option value="">Select type</option><option>Vegetarian</option><option>Egg</option><option>Chicken</option><option>Fish</option><option>Meat</option></select></div><div class="form-group"><label for="recipe-category">Category</label><input id="recipe-category" type="text" placeholder="Example: Vegetable Curry"></div><div class="form-group"><label for="total-servings">Total Servings</label><input id="total-servings" type="number" min="0.25" step="0.25" value="2"></div></div>
+        <section class="recipe-builder-section"><div class="panel-heading"><div><h3>Ingredients</h3><p>Known ingredients calculate automatically. Unknown items allow a manual calorie reference.</p></div><button class="secondary-button" id="add-ingredient-button">+ Ingredient</button></div><datalist id="ingredient-options"></datalist><div id="ingredients-container"></div></section>
+        <section class="recipe-calculation"><div><span>Total Recipe Calories</span><strong id="recipe-total-calories">0 kcal</strong></div><div><span>Total Servings</span><strong id="recipe-total-servings-summary">2</strong></div><div><span>Calories per Serving</span><strong id="recipe-calories-per-serving">0 kcal</strong></div></section>
+        <div class="button-row sticky-actions"><button class="secondary-button" id="ignore-new-recipe-button">Ignore</button><button class="primary-button" id="save-new-recipe-button">Add to Master Database</button></div>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="js/data.js"></script>
+  <script src="js/script.js"></script>
+</body>
+</html>
