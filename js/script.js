@@ -20,11 +20,13 @@ const defaultSettings = {
 
 let applicationSettings = loadJson(STORAGE.settings, defaultSettings);
 let savedMeals = loadJson(STORAGE.meals, []);
-let savedRecipes = loadJson(STORAGE.recipes, recipeDatabase);
+let savedRecipes = normalizeRecipeCollection(loadJson(STORAGE.recipes, recipeDatabase));
 let weightHistory = loadJson(STORAGE.weightHistory, []);
 let currentMealItems = [];
 let ingredientRowCounter = 0;
 let toastTimer;
+let editingRecipeId = null;
+let selectedRecipeDetailsId = null;
 
 const today = new Date();
 const todayForInput = getLocalDateString(today);
@@ -74,6 +76,32 @@ function loadJson(key, fallback) {
 
 function structuredCloneSafe(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeRecipeRecord(recipe, index = 0) {
+  const normalized = recipe && typeof recipe === "object" ? { ...recipe } : {};
+  return {
+    ...normalized,
+    id: normalized.id || `R-legacy-${index + 1}`,
+    name: String(normalized.name || "Untitled Recipe").trim(),
+    foodType: String(normalized.foodType || "Unspecified").trim(),
+    category: String(normalized.category || "Uncategorized").trim(),
+    totalServings: Number(normalized.totalServings) > 0 ? Number(normalized.totalServings) : 1,
+    totalCalories: Number(normalized.totalCalories) || 0,
+    caloriesPerServing: Number(normalized.caloriesPerServing) || 0,
+    ingredients: Array.isArray(normalized.ingredients)
+      ? normalized.ingredients.map(ingredient => ({
+          name: String(ingredient?.name || "Unnamed ingredient").trim(),
+          quantity: Number(ingredient?.quantity) || 0,
+          unit: String(ingredient?.unit || "").trim(),
+          calories: Number(ingredient?.calories) || 0
+        }))
+      : null
+  };
+}
+
+function normalizeRecipeCollection(recipes) {
+  return (Array.isArray(recipes) ? recipes : recipeDatabase).map(normalizeRecipeRecord);
 }
 
 function saveAll() {
@@ -163,7 +191,10 @@ function openDialog(id, entryType) {
     loadRecipeOptions();
     if (entryType) selectEntryType(entryType);
   }
-  if (id === "recipe-dialog" && $("ingredients-container").children.length === 0) createIngredientRow();
+  if (id === "recipe-dialog") {
+    if (entryType !== "edit") prepareNewRecipe();
+    if ($("ingredients-container").children.length === 0) createIngredientRow();
+  }
   if (id === "weight-dialog") {
     $("weight-date").value = todayForInput;
     const todayRecord = weightHistory.find(record => record.date === todayForInput);
@@ -391,14 +422,25 @@ function renderMealHistory() {
 
 // Recipe Builder
 const ingredientsContainer = $("ingredients-container");
-function normalize(value) { return String(value || "").trim().toLowerCase(); }
+function normalize(value) { return String(value || "").trim().replace(/\s+/g, " ").toLowerCase(); }
 function findIngredient(name) {
   const query = normalize(name);
-  return ingredientDatabase.find(item => normalize(item.name) === query || item.aliases.some(alias => normalize(alias) === query));
+  return ingredientDatabase.find(item => normalize(item.name) === query || (item.aliases || []).some(alias => normalize(alias) === query));
 }
 
 function populateIngredientOptions() {
-  $("ingredient-options").innerHTML = ingredientDatabase.map(item => `<option value="${escapeHtml(item.name)}"></option>`).join("");
+  const uniqueNames = new Map();
+  ingredientDatabase.forEach(item => {
+    [item.name, ...(item.aliases || [])].forEach(name => {
+      const cleaned = String(name || "").trim().replace(/\s+/g, " ");
+      const key = normalize(cleaned);
+      if (key && !uniqueNames.has(key)) uniqueNames.set(key, cleaned);
+    });
+  });
+  $("ingredient-options").innerHTML = [...uniqueNames.values()]
+    .sort((a, b) => a.localeCompare(b))
+    .map(name => `<option value="${escapeHtml(name)}"></option>`)
+    .join("");
 }
 
 function createIngredientRow(seed = {}) {
@@ -415,6 +457,11 @@ function createIngredientRow(seed = {}) {
     <div class="manual-reference"><div class="form-group"><label>Reference Calories</label><input type="number" class="manual-calories" min="0" step="0.01" placeholder="77"></div><div class="form-group"><label>Reference Amount</label><input type="number" class="manual-amount" min="0" step="0.01" placeholder="100"></div><div class="form-group"><label>Reference Unit</label><select class="manual-unit"><option value="g">g</option><option value="ml">ml</option><option value="tsp">tsp</option><option value="tbsp">tbsp</option><option value="piece">piece</option></select></div></div>`;
   ingredientsContainer.appendChild(row);
   row.querySelector(".ingredient-unit-input").value = seed.unit || "g";
+  if (seed.calories > 0 && !findIngredient(seed.name)) {
+    row.querySelector(".manual-calories").value = seed.calories;
+    row.querySelector(".manual-amount").value = seed.quantity || 1;
+    row.querySelector(".manual-unit").value = seed.unit || "g";
+  }
   ["input", "change"].forEach(eventName => row.addEventListener(eventName, () => updateIngredientRow(row)));
   row.querySelector(".remove-ingredient-button").addEventListener("click", () => {
     if (ingredientsContainer.children.length === 1) return showMessage("A recipe must contain at least one ingredient.");
@@ -471,10 +518,46 @@ function resetNewRecipeForm() {
   ingredientsContainer.innerHTML = ""; ingredientRowCounter = 0; createIngredientRow(); calculateRecipeNutrition();
 }
 
+function prepareNewRecipe() {
+  editingRecipeId = null;
+  $("recipe-dialog-title").textContent = "Create New Recipe";
+  $("recipe-dialog-description").textContent = "Build a measured recipe with automatic ingredient calculations.";
+  $("save-new-recipe-button").textContent = "Add to Master Database";
+  resetNewRecipeForm();
+}
+
+function editRecipe(recipeId) {
+  const recipe = savedRecipes.find(item => item.id === recipeId);
+  if (!recipe) return showMessage("The selected recipe could not be found.");
+  editingRecipeId = recipe.id;
+  $("recipe-dialog-title").textContent = `Edit ${recipe.name}`;
+  $("recipe-dialog-description").textContent = "Update this recipe while keeping its existing recipe ID.";
+  $("save-new-recipe-button").textContent = "Save Recipe Changes";
+  $("new-recipe-name").value = recipe.name;
+  $("food-type").value = recipe.foodType;
+  if (!$("food-type").value) {
+    const option = document.createElement("option");
+    option.value = recipe.foodType;
+    option.textContent = recipe.foodType;
+    $("food-type").appendChild(option);
+    $("food-type").value = recipe.foodType;
+  }
+  $("recipe-category").value = recipe.category;
+  $("total-servings").value = recipe.totalServings;
+  ingredientsContainer.innerHTML = "";
+  ingredientRowCounter = 0;
+  if (Array.isArray(recipe.ingredients) && recipe.ingredients.length) recipe.ingredients.forEach(createIngredientRow);
+  else createIngredientRow();
+  calculateRecipeNutrition();
+  closeDialog("recipe-details-dialog");
+  openDialog("recipe-dialog", "edit");
+}
+
 $("ignore-new-recipe-button").addEventListener("click", () => {
   const hasData = $("new-recipe-name").value.trim() || calculateRecipeNutrition().total > 0;
-  if (hasData && !confirm("Ignore this recipe and clear the entered information?")) return;
-  resetNewRecipeForm(); closeDialog("recipe-dialog");
+  const action = editingRecipeId ? "Discard these recipe changes?" : "Ignore this recipe and clear the entered information?";
+  if (hasData && !confirm(action)) return;
+  prepareNewRecipe(); closeDialog("recipe-dialog");
 });
 
 $("save-new-recipe-button").addEventListener("click", () => {
@@ -509,51 +592,125 @@ $("save-new-recipe-button").addEventListener("click", () => {
     focusFirstInvalid(invalid[0].field);
     return;
   }
-  if (savedRecipes.some(recipe => normalize(recipe.name) === normalize(name))) return showMessage("A recipe with this name already exists.");
+  if (savedRecipes.some(recipe => recipe.id !== editingRecipeId && normalize(recipe.name) === normalize(name))) return showMessage("A recipe with this name already exists.");
   const ingredients = $all(".ingredient-entry-row").map(row => ({
     name: row.querySelector(".ingredient-name-input").value.trim(),
     quantity: Number(row.querySelector(".ingredient-quantity-input").value),
     unit: row.querySelector(".ingredient-unit-input").value,
     calories: Number(row.querySelector(".ingredient-total-input").value)
   })).filter(item => item.name && item.quantity > 0);
-  savedRecipes.push({
-    id: `R${String(savedRecipes.length + 1).padStart(3, "0")}-${Date.now().toString(36)}`,
+  const recipeData = {
     name, foodType, category: category || "Uncategorized", ingredients,
     totalServings: nutrition.servings,
     totalCalories: Math.round(nutrition.total),
-    caloriesPerServing: Math.round(nutrition.perServing),
-    createdAt: new Date().toISOString()
-  });
-  saveAll(); loadRecipeOptions(); renderRecipeHandbook(); resetNewRecipeForm(); closeDialog("recipe-dialog");
-  showMessage(`${name} added to the Recipe Master Database.`);
+    caloriesPerServing: Math.round(nutrition.perServing)
+  };
+  const editedRecipe = editingRecipeId ? savedRecipes.find(recipe => recipe.id === editingRecipeId) : null;
+  if (editedRecipe) {
+    Object.assign(editedRecipe, recipeData, { updatedAt: new Date().toISOString() });
+  } else {
+    savedRecipes.push({
+      id: `R${String(savedRecipes.length + 1).padStart(3, "0")}-${Date.now().toString(36)}`,
+      ...recipeData,
+      createdAt: new Date().toISOString()
+    });
+  }
+  const successMessage = editedRecipe ? `${name} updated successfully.` : `${name} added to the Recipe Master Database.`;
+  saveAll();
+  loadRecipeOptions();
+  populateRecipeFilters();
+  renderRecipeHandbook();
+  prepareNewRecipe();
+  closeDialog("recipe-dialog");
+  showMessage(successMessage);
 });
 
 // Recipe handbook
-$("recipe-search").addEventListener("input", renderRecipeHandbook);
+["recipe-search", "recipe-food-type-filter", "recipe-category-filter", "recipe-sort"].forEach(id => {
+  $(id).addEventListener(id === "recipe-search" ? "input" : "change", renderRecipeHandbook);
+});
+
+function populateRecipeFilters() {
+  const foodTypeSelect = $("recipe-food-type-filter");
+  const categorySelect = $("recipe-category-filter");
+  const selectedFoodType = foodTypeSelect.value;
+  const selectedCategory = categorySelect.value;
+  const foodTypes = [...new Set(savedRecipes.map(recipe => recipe.foodType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const categories = [...new Set(savedRecipes.map(recipe => recipe.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  foodTypeSelect.innerHTML = '<option value="">All food types</option>' + foodTypes.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("");
+  categorySelect.innerHTML = '<option value="">All categories</option>' + categories.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("");
+  if (foodTypes.includes(selectedFoodType)) foodTypeSelect.value = selectedFoodType;
+  if (categories.includes(selectedCategory)) categorySelect.value = selectedCategory;
+}
+
 function renderRecipeHandbook() {
   const query = normalize($("recipe-search").value);
-  const recipes = savedRecipes.filter(recipe => !query || normalize(recipe.name).includes(query) || normalize(recipe.category).includes(query));
+  const foodType = normalize($("recipe-food-type-filter").value);
+  const category = normalize($("recipe-category-filter").value);
+  const sortMode = $("recipe-sort").value;
+  const recipes = savedRecipes.filter(recipe =>
+    (!query || normalize(recipe.name).includes(query)) &&
+    (!foodType || normalize(recipe.foodType) === foodType) &&
+    (!category || normalize(recipe.category) === category)
+  );
+  recipes.sort((a, b) => {
+    if (sortMode === "name-desc") return b.name.localeCompare(a.name);
+    if (sortMode === "calories-asc") return Number(a.caloriesPerServing) - Number(b.caloriesPerServing) || a.name.localeCompare(b.name);
+    if (sortMode === "calories-desc") return Number(b.caloriesPerServing) - Number(a.caloriesPerServing) || a.name.localeCompare(b.name);
+    return a.name.localeCompare(b.name);
+  });
   const container = $("recipe-handbook-container");
   if (!recipes.length) {
     container.innerHTML = '<div class="empty-state"><span>📖</span><h4>No matching recipes</h4><p>Create a new recipe or change your search.</p></div>';
     return;
   }
-  container.innerHTML = `<div class="recipe-grid">${[...recipes].sort((a,b)=>a.name.localeCompare(b.name)).map(recipe => `
+  container.innerHTML = `<p class="recipe-result-count">${recipes.length} recipe${recipes.length === 1 ? "" : "s"} shown</p><div class="recipe-grid">${recipes.map(recipe => `
     <article class="recipe-card">
       <div class="recipe-card-header"><div><h3>${escapeHtml(recipe.name)}</h3><small>${escapeHtml(recipe.category || "Uncategorized")}</small></div><strong>${formatCalories(recipe.caloriesPerServing)}</strong></div>
       <div class="recipe-meta"><span class="badge">${escapeHtml(recipe.foodType)}</span><span class="badge">${recipe.totalServings} servings</span><span class="badge">${formatCalories(recipe.totalCalories)} total</span></div>
-      <div class="button-row"><button class="primary-button compact-button" data-use-recipe="${recipe.id}">Add Meal</button>${recipe.id !== "R001" ? `<button class="recipe-delete-button" data-delete-recipe="${recipe.id}">Delete</button>` : ""}</div>
+      <div class="recipe-card-actions"><button class="secondary-button compact-button" data-view-recipe="${recipe.id}">View Details</button><button class="primary-button compact-button" data-use-recipe="${recipe.id}">Add Meal</button><button class="secondary-button compact-button" data-edit-recipe="${recipe.id}">Edit Recipe</button><button class="delete-button compact-button" data-delete-recipe="${recipe.id}">Delete</button></div>
     </article>`).join("")}</div>`;
+  $all("[data-view-recipe]").forEach(button => button.addEventListener("click", () => showRecipeDetails(button.dataset.viewRecipe)));
   $all("[data-use-recipe]").forEach(button => button.addEventListener("click", () => {
     openDialog("meal-dialog", "recipe"); $("recipe-selection").value = button.dataset.useRecipe;
   }));
+  $all("[data-edit-recipe]").forEach(button => button.addEventListener("click", () => editRecipe(button.dataset.editRecipe)));
   $all("[data-delete-recipe]").forEach(button => button.addEventListener("click", () => {
     const recipe = savedRecipes.find(item => item.id === button.dataset.deleteRecipe);
-    if (!recipe || !confirm(`Delete ${recipe.name} from the Recipe Master Database?`)) return;
+    if (!recipe || !confirm(`Delete "${recipe.name}" from the Recipe Handbook? Historical meals already logged with this recipe will not be changed.`)) return;
     savedRecipes = savedRecipes.filter(item => item.id !== recipe.id);
-    saveAll(); loadRecipeOptions(); renderRecipeHandbook(); showMessage("Recipe deleted.");
+    saveAll();
+    loadRecipeOptions();
+    populateRecipeFilters();
+    renderRecipeHandbook();
+    showMessage(`${recipe.name} deleted. Historical meals were preserved.`);
   }));
 }
+
+function showRecipeDetails(recipeId) {
+  const recipe = savedRecipes.find(item => item.id === recipeId);
+  if (!recipe) return showMessage("The selected recipe could not be found.");
+  selectedRecipeDetailsId = recipe.id;
+  $("recipe-details-title").textContent = recipe.name;
+  const ingredientsMarkup = Array.isArray(recipe.ingredients) && recipe.ingredients.length
+    ? `<ul class="recipe-detail-ingredients">${recipe.ingredients.map(ingredient => `
+        <li class="recipe-detail-ingredient"><strong>${escapeHtml(ingredient.name)}</strong><span>${Number(ingredient.quantity).toLocaleString("en-US")} ${escapeHtml(ingredient.unit || "")}</span><span>${formatCalories(ingredient.calories)}</span></li>`).join("")}</ul>`
+    : '<div class="older-recipe-message">Ingredient details are not available for this older recipe.</div>';
+  $("recipe-details-content").innerHTML = `
+    <div class="recipe-details-summary">
+      <div class="recipe-detail-stat"><span>Food Type</span><strong>${escapeHtml(recipe.foodType)}</strong></div>
+      <div class="recipe-detail-stat"><span>Category</span><strong>${escapeHtml(recipe.category)}</strong></div>
+      <div class="recipe-detail-stat"><span>Total Servings</span><strong>${recipe.totalServings}</strong></div>
+      <div class="recipe-detail-stat"><span>Total Recipe Calories</span><strong>${formatCalories(recipe.totalCalories)}</strong></div>
+      <div class="recipe-detail-stat"><span>Calories per Serving</span><strong>${formatCalories(recipe.caloriesPerServing)}</strong></div>
+    </div>
+    <section class="recipe-details-section"><h3>Ingredients</h3>${ingredientsMarkup}</section>`;
+  openDialog("recipe-details-dialog");
+}
+
+$("edit-recipe-from-details-button").addEventListener("click", () => {
+  if (selectedRecipeDetailsId) editRecipe(selectedRecipeDetailsId);
+});
 
 // Weight tracking
 $("save-weight-button").addEventListener("click", () => {
@@ -733,5 +890,6 @@ loadRecipeOptions();
 renderCurrentMeal();
 updateDashboard();
 renderMealHistory();
+populateRecipeFilters();
 renderRecipeHandbook();
 renderWeeklyProgress();
