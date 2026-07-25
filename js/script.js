@@ -836,8 +836,14 @@ $("save-new-recipe-button").addEventListener("click", () => {
 });
 
 // Recipe handbook
+const RECIPES_PER_PAGE = 10;
+let recipeHandbookPage = 1;
+
 ["recipe-search", "recipe-food-type-filter", "recipe-category-filter", "recipe-sort"].forEach(id => {
-  $(id).addEventListener(id === "recipe-search" ? "input" : "change", renderRecipeHandbook);
+  $(id).addEventListener(id === "recipe-search" ? "input" : "change", () => {
+    recipeHandbookPage = 1;
+    renderRecipeHandbook();
+  });
 });
 
 function populateRecipeFilters() {
@@ -854,6 +860,7 @@ function populateRecipeFilters() {
 }
 
 function renderRecipeHandbook() {
+  $("recipe-saved-count").textContent = `${savedRecipes.length} recipe${savedRecipes.length === 1 ? "" : "s"} saved`;
   const query = normalize($("recipe-search").value);
   const foodType = normalize($("recipe-food-type-filter").value);
   const category = normalize($("recipe-category-filter").value);
@@ -870,35 +877,81 @@ function renderRecipeHandbook() {
     return a.name.localeCompare(b.name);
   });
   const container = $("recipe-handbook-container");
-  if (!recipes.length) {
-    container.innerHTML = `<p class="recipe-result-count">Showing 0 of ${savedRecipes.length} recipes</p><div class="empty-state"><span>📖</span><h4>No matching recipes</h4><p>Create a new recipe or change your search.</p></div>`;
+  if (!savedRecipes.length) {
+    container.innerHTML = '<div class="empty-state recipe-empty-state"><span>📖</span><h4>No recipes saved yet.</h4><button class="primary-button" data-empty-new-recipe>+ New Recipe</button></div>';
+    container.querySelector("[data-empty-new-recipe]").addEventListener("click", () => openDialog("recipe-dialog"));
     return;
   }
-  const filtering = Boolean(query || foodType || category);
-  const countLabel = filtering
-    ? `Showing ${recipes.length} of ${savedRecipes.length} recipes`
-    : `${savedRecipes.length} recipe${savedRecipes.length === 1 ? "" : "s"}`;
-  container.innerHTML = `<p class="recipe-result-count">${countLabel}</p><div class="recipe-grid">${recipes.map(recipe => `
-    <article class="recipe-card">
-      <div class="recipe-card-header"><div><h3>${escapeHtml(recipe.name)}</h3><small>Category: ${escapeHtml(recipe.category || "Uncategorized")}</small></div><strong>${formatCalories(recipe.caloriesPerServing)} / serving</strong></div>
-      <div class="recipe-meta"><span class="badge">${escapeHtml(recipe.foodType)}</span><span class="badge">${recipe.totalServings} servings</span><span class="badge">${formatCalories(recipe.totalCalories)} total</span></div>
-      <div class="recipe-card-actions"><button class="secondary-button compact-button" data-view-recipe="${recipe.id}">View Details</button><button class="primary-button compact-button" data-use-recipe="${recipe.id}">Add Meal</button><button class="secondary-button compact-button" data-edit-recipe="${recipe.id}">Edit Recipe</button><button class="delete-button compact-button" data-delete-recipe="${recipe.id}">Delete</button></div>
-    </article>`).join("")}</div>`;
-  $all("[data-view-recipe]").forEach(button => button.addEventListener("click", () => showRecipeDetails(button.dataset.viewRecipe)));
-  $all("[data-use-recipe]").forEach(button => button.addEventListener("click", () => {
-    openDialog("meal-dialog", "recipe"); $("recipe-selection").value = button.dataset.useRecipe;
-  }));
-  $all("[data-edit-recipe]").forEach(button => button.addEventListener("click", () => editRecipe(button.dataset.editRecipe)));
-  $all("[data-delete-recipe]").forEach(button => button.addEventListener("click", () => {
-    const recipe = savedRecipes.find(item => item.id === button.dataset.deleteRecipe);
-    if (!recipe || !confirm(`Delete "${recipe.name}" from the Recipe Handbook? Historical meals already logged with this recipe will not be changed.`)) return;
-    savedRecipes = savedRecipes.filter(item => item.id !== recipe.id);
-    saveAll();
-    loadRecipeOptions();
-    populateRecipeFilters();
+  if (!recipes.length) {
+    container.innerHTML = '<div class="empty-state recipe-empty-state"><span>🔎</span><h4>No recipes match your search or filters.</h4><button class="secondary-button" data-clear-recipe-filters>Clear Filters</button></div>';
+    container.querySelector("[data-clear-recipe-filters]").addEventListener("click", clearRecipeFilters);
+    return;
+  }
+  const totalPages = Math.ceil(recipes.length / RECIPES_PER_PAGE);
+  recipeHandbookPage = Math.min(Math.max(recipeHandbookPage, 1), totalPages);
+  const startIndex = (recipeHandbookPage - 1) * RECIPES_PER_PAGE;
+  const pageRecipes = recipes.slice(startIndex, startIndex + RECIPES_PER_PAGE);
+  const startNumber = startIndex + 1;
+  const endNumber = startIndex + pageRecipes.length;
+
+  container.innerHTML = `
+    <div class="recipe-list-summary"><p class="recipe-result-count">Showing ${startNumber}–${endNumber} of ${recipes.length} recipes</p></div>
+    <div class="recipe-list" role="table" aria-label="Saved recipes">
+      <div class="recipe-list-header" role="row">
+        <span role="columnheader">Recipe</span><span role="columnheader">Category</span><span role="columnheader">Food Type</span><span role="columnheader">Calories / Serving</span><span role="columnheader">Servings</span><span role="columnheader">Action</span>
+      </div>
+      ${pageRecipes.map(recipe => `
+        <div class="recipe-list-row" role="row">
+          <div class="recipe-list-name" role="cell"><strong>${escapeHtml(recipe.name)}</strong><span class="recipe-mobile-meta">${escapeHtml(recipe.category || "Uncategorized")} • ${escapeHtml(recipe.foodType || "Unspecified")}</span></div>
+          <span class="recipe-list-category" role="cell">${escapeHtml(recipe.category || "Uncategorized")}</span>
+          <span class="recipe-list-food-type" role="cell">${escapeHtml(recipe.foodType || "Unspecified")}</span>
+          <strong class="recipe-list-calories" role="cell">${formatCalories(recipe.caloriesPerServing)}<span> / serving</span></strong>
+          <span class="recipe-list-servings" role="cell">${recipe.totalServings}</span>
+          <div class="recipe-list-action" role="cell"><button class="recipe-view-button" data-view-recipe="${recipe.id}">View <span aria-hidden="true">›</span></button></div>
+        </div>`).join("")}
+    </div>
+    <nav class="recipe-pagination" aria-label="Recipe pages">
+      <button class="secondary-button compact-button" data-recipe-page="previous" ${recipeHandbookPage === 1 ? "disabled" : ""}>Previous</button>
+      <span>Page ${recipeHandbookPage} of ${totalPages}</span>
+      <button class="secondary-button compact-button" data-recipe-page="next" ${recipeHandbookPage === totalPages ? "disabled" : ""}>Next</button>
+    </nav>`;
+
+  container.querySelectorAll("[data-view-recipe]").forEach(button => button.addEventListener("click", () => showRecipeDetails(button.dataset.viewRecipe)));
+  container.querySelectorAll("[data-recipe-page]").forEach(button => button.addEventListener("click", () => {
+    recipeHandbookPage += button.dataset.recipePage === "next" ? 1 : -1;
     renderRecipeHandbook();
-    showMessage(`${recipe.name} deleted. Historical meals were preserved.`);
+    container.scrollIntoView({ behavior: "smooth", block: "start" });
   }));
+}
+
+function clearRecipeFilters() {
+  $("recipe-search").value = "";
+  $("recipe-food-type-filter").value = "";
+  $("recipe-category-filter").value = "";
+  $("recipe-sort").value = "name-asc";
+  recipeHandbookPage = 1;
+  renderRecipeHandbook();
+}
+
+function openMealFromRecipe(recipeId) {
+  const recipe = savedRecipes.find(item => item.id === recipeId);
+  if (!recipe) return showMessage("The selected recipe could not be found.");
+  closeDialog("recipe-details-dialog");
+  openDialog("meal-dialog", "recipe");
+  $("recipe-selection").value = recipe.id;
+}
+
+function deleteRecipe(recipeId) {
+  const recipe = savedRecipes.find(item => item.id === recipeId);
+  if (!recipe || !confirm(`Delete "${recipe.name}" from the Recipe Handbook? Historical meals already logged with this recipe will not be changed.`)) return;
+  savedRecipes = savedRecipes.filter(item => item.id !== recipe.id);
+  selectedRecipeDetailsId = null;
+  saveAll();
+  closeDialog("recipe-details-dialog");
+  loadRecipeOptions();
+  populateRecipeFilters();
+  renderRecipeHandbook();
+  showMessage(`${recipe.name} deleted. Historical meals were preserved.`);
 }
 
 function showRecipeDetails(recipeId) {
@@ -914,9 +967,9 @@ function showRecipeDetails(recipeId) {
     <div class="recipe-details-summary">
       <div class="recipe-detail-stat"><span>Food Type</span><strong>${escapeHtml(recipe.foodType)}</strong></div>
       <div class="recipe-detail-stat"><span>Category</span><strong>${escapeHtml(recipe.category)}</strong></div>
-      <div class="recipe-detail-stat"><span>Total Servings</span><strong>${recipe.totalServings}</strong></div>
-      <div class="recipe-detail-stat"><span>Total Recipe Calories</span><strong>${formatCalories(recipe.totalCalories)}</strong></div>
       <div class="recipe-detail-stat"><span>Calories per Serving</span><strong>${formatCalories(recipe.caloriesPerServing)}</strong></div>
+      <div class="recipe-detail-stat"><span>Total Calories</span><strong>${formatCalories(recipe.totalCalories)}</strong></div>
+      <div class="recipe-detail-stat"><span>Total Servings</span><strong>${recipe.totalServings}</strong></div>
     </div>
     <section class="recipe-details-section"><h3>Ingredients</h3>${ingredientsMarkup}</section>`;
   openDialog("recipe-details-dialog");
@@ -924,6 +977,12 @@ function showRecipeDetails(recipeId) {
 
 $("edit-recipe-from-details-button").addEventListener("click", () => {
   if (selectedRecipeDetailsId) editRecipe(selectedRecipeDetailsId);
+});
+$("add-meal-from-details-button").addEventListener("click", () => {
+  if (selectedRecipeDetailsId) openMealFromRecipe(selectedRecipeDetailsId);
+});
+$("delete-recipe-from-details-button").addEventListener("click", () => {
+  if (selectedRecipeDetailsId) deleteRecipe(selectedRecipeDetailsId);
 });
 
 // Weight tracking
