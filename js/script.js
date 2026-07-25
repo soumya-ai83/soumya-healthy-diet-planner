@@ -1,14 +1,16 @@
 /*
 Soumya Healthy Diet Planner
-Version 0.5.2B — Dashboard workflow + Recipe Master Database saving
+Release 1.0 Final RC
 Project Codename: Project Jatibaba
 */
 
+const SCHEMA_VERSION = 1;
 const STORAGE = {
   meals: "soumyaHealthyDietMeals",
   recipes: "soumyaHealthyDietRecipes",
   settings: "soumyaHealthyDietSettings",
-  weightHistory: "soumyaHealthyDietWeightHistory"
+  weightHistory: "soumyaHealthyDietWeightHistory",
+  metadata: "soumyaHealthyDietMetadata"
 };
 
 const defaultSettings = {
@@ -18,15 +20,22 @@ const defaultSettings = {
   weightUnit: "lb"
 };
 
-let applicationSettings = loadJson(STORAGE.settings, defaultSettings);
-let savedMeals = loadJson(STORAGE.meals, []);
+let applicationSettings = normalizeSettings(loadJson(STORAGE.settings, defaultSettings));
+let savedMeals = normalizeMealCollection(loadJson(STORAGE.meals, []));
 let savedRecipes = normalizeRecipeCollection(loadJson(STORAGE.recipes, recipeDatabase));
-let weightHistory = loadJson(STORAGE.weightHistory, []);
+let weightHistory = normalizeWeightCollection(loadJson(STORAGE.weightHistory, []));
+let applicationMetadata = normalizeMetadata(loadJson(STORAGE.metadata, {}));
 let currentMealItems = [];
 let ingredientRowCounter = 0;
 let toastTimer;
 let editingRecipeId = null;
 let selectedRecipeDetailsId = null;
+let editingMealId = null;
+let editingMealItemId = null;
+let isSavingMeal = false;
+let isSavingRecipe = false;
+let isSavingWeight = false;
+let isImportingData = false;
 
 const today = new Date();
 const todayForInput = getLocalDateString(today);
@@ -43,6 +52,7 @@ function getLocalDateString(date) {
 
 function formatDisplayDate(dateString, compact = false) {
   const date = new Date(`${dateString}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return dateString || "Date not available";
   return date.toLocaleDateString("en-US", compact
     ? { month: "short", day: "numeric" }
     : { month: "long", day: "numeric", year: "numeric" });
@@ -104,11 +114,65 @@ function normalizeRecipeCollection(recipes) {
   return (Array.isArray(recipes) ? recipes : recipeDatabase).map(normalizeRecipeRecord);
 }
 
+function normalizeMealItem(item, index = 0) {
+  const normalized = item && typeof item === "object" ? { ...item } : {};
+  return {
+    ...normalized,
+    id: normalized.id || `mealitem-legacy-${index + 1}`,
+    source: String(normalized.source || "Saved").trim(),
+    name: String(normalized.name || "Saved meal item").trim(),
+    details: String(normalized.details || "Details not available").trim(),
+    calories: Math.max(0, Number(normalized.calories) || 0)
+  };
+}
+
+function normalizeMealRecord(meal, index = 0) {
+  const normalized = meal && typeof meal === "object" ? { ...meal } : {};
+  const items = Array.isArray(normalized.items) ? normalized.items.map(normalizeMealItem) : [];
+  const itemTotal = items.reduce((sum, item) => sum + item.calories, 0);
+  return {
+    ...normalized,
+    id: normalized.id || `meal-legacy-${index + 1}`,
+    date: String(normalized.date || "").trim(),
+    mealType: String(normalized.mealType || "Meal").trim(),
+    items,
+    totalCalories: Number.isFinite(Number(normalized.totalCalories)) ? Math.max(0, Number(normalized.totalCalories)) : itemTotal
+  };
+}
+
+function normalizeMealCollection(meals) {
+  return (Array.isArray(meals) ? meals : []).map(normalizeMealRecord);
+}
+
+function normalizeWeightCollection(records) {
+  return (Array.isArray(records) ? records : [])
+    .filter(record => record && typeof record === "object" && record.date && Number(record.weight) > 0)
+    .map((record, index) => ({ ...record, id: record.id || `weight-legacy-${index + 1}`, date: String(record.date), weight: Number(record.weight) }));
+}
+
+function normalizeSettings(settings) {
+  const source = settings && typeof settings === "object" ? settings : {};
+  return {
+    ...defaultSettings,
+    ...source,
+    dailyCalorieTarget: Number(source.dailyCalorieTarget) > 0 ? Number(source.dailyCalorieTarget) : defaultSettings.dailyCalorieTarget,
+    currentWeight: Number(source.currentWeight) > 0 ? Number(source.currentWeight) : defaultSettings.currentWeight,
+    goalWeight: Number(source.goalWeight) > 0 ? Number(source.goalWeight) : defaultSettings.goalWeight,
+    weightUnit: String(source.weightUnit || defaultSettings.weightUnit)
+  };
+}
+
+function normalizeMetadata(metadata) {
+  return { ...(metadata && typeof metadata === "object" ? metadata : {}), schemaVersion: SCHEMA_VERSION };
+}
+
 function saveAll() {
+  applicationMetadata = { ...applicationMetadata, schemaVersion: SCHEMA_VERSION, updatedAt: new Date().toISOString() };
   localStorage.setItem(STORAGE.meals, JSON.stringify(savedMeals));
   localStorage.setItem(STORAGE.recipes, JSON.stringify(savedRecipes));
   localStorage.setItem(STORAGE.settings, JSON.stringify(applicationSettings));
   localStorage.setItem(STORAGE.weightHistory, JSON.stringify(weightHistory));
+  localStorage.setItem(STORAGE.metadata, JSON.stringify(applicationMetadata));
 }
 
 function showMessage(message) {
@@ -187,9 +251,10 @@ function openDialog(id, entryType) {
   const dialog = $(id);
   if (!dialog) return;
   if (id === "meal-dialog") {
+    if (entryType !== "edit") prepareNewMeal();
     $("meal-date").value ||= todayForInput;
     loadRecipeOptions();
-    if (entryType) selectEntryType(entryType);
+    if (entryType && entryType !== "edit") selectEntryType(entryType);
   }
   if (id === "recipe-dialog") {
     if (entryType !== "edit") prepareNewRecipe();
@@ -241,10 +306,18 @@ function calculateCurrentMealTotal() {
 }
 
 function addItemToCurrentMeal(item) {
-  currentMealItems.push(item);
+  const wasEditing = Boolean(editingMealItemId);
+  if (editingMealItemId) {
+    const index = currentMealItems.findIndex(existing => existing.id === editingMealItemId);
+    if (index >= 0) currentMealItems[index] = { ...item, id: editingMealItemId };
+    editingMealItemId = null;
+    $("add-custom-item-button").textContent = "Add to Meal";
+  } else {
+    currentMealItems.push(item);
+  }
   clearFieldError($("current-meal-items"));
   renderCurrentMeal();
-  showMessage(`${item.name} added to the current meal.`);
+  showMessage(`${item.name} ${wasEditing ? "updated" : "added to the current meal"}.`);
 }
 
 function renderCurrentMeal() {
@@ -255,10 +328,12 @@ function renderCurrentMeal() {
     container.innerHTML = currentMealItems.map(item => `
       <div class="meal-item-row">
         <div class="meal-item-information"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.details)}</span><small class="source-label">${escapeHtml(item.source)}</small></div>
-        <div class="meal-item-actions"><strong>${formatCalories(item.calories)}</strong><button class="remove-item-button" data-remove-item="${item.id}">Remove</button></div>
+        <div class="meal-item-actions"><strong>${formatCalories(item.calories)}</strong><div class="compact-action-group"><button class="secondary-button compact-button" data-edit-meal-item="${item.id}">Edit</button><button class="remove-item-button compact-button" data-remove-item="${item.id}">Remove</button></div></div>
       </div>`).join("");
+    $all("[data-edit-meal-item]").forEach(button => button.addEventListener("click", () => editCurrentMealItem(button.dataset.editMealItem)));
     $all("[data-remove-item]").forEach(button => button.addEventListener("click", () => {
       currentMealItems = currentMealItems.filter(item => item.id !== button.dataset.removeItem);
+      if (editingMealItemId === button.dataset.removeItem) clearCustomEntry();
       renderCurrentMeal();
     }));
   }
@@ -282,9 +357,11 @@ $("add-recipe-item-button").addEventListener("click", () => {
 $("add-custom-item-button").addEventListener("click", () => {
   const name = $("custom-food-name").value.trim();
   const calories = Number($("custom-food-calories").value);
+  const details = $("custom-food-details").value.trim() || "Custom food";
   if (!name) return showMessage("Please enter the food name.");
   if (!(calories > 0)) return showMessage("Please enter valid calories.");
-  addItemToCurrentMeal({ id: createUniqueId("mealitem"), source: "Manual", name, details: "Custom food", calories: Math.round(calories) });
+  const original = currentMealItems.find(item => item.id === editingMealItemId);
+  addItemToCurrentMeal({ id: createUniqueId("mealitem"), source: original?.source || "Manual", name, details, calories: Math.round(calories) });
   clearCustomEntry();
 });
 
@@ -296,7 +373,25 @@ $("add-jatibaba-item-button").addEventListener("click", () => {
   clearJatibabaEntry();
 });
 
-function clearCustomEntry() { $("custom-food-name").value = ""; $("custom-food-calories").value = ""; }
+function clearCustomEntry() {
+  $("custom-food-name").value = "";
+  $("custom-food-calories").value = "";
+  $("custom-food-details").value = "";
+  editingMealItemId = null;
+  $("add-custom-item-button").textContent = "Add to Meal";
+}
+
+function editCurrentMealItem(itemId) {
+  const item = currentMealItems.find(current => current.id === itemId);
+  if (!item) return;
+  editingMealItemId = item.id;
+  $("custom-food-name").value = item.name;
+  $("custom-food-calories").value = item.calories;
+  $("custom-food-details").value = item.details;
+  $("add-custom-item-button").textContent = "Update Item";
+  selectEntryType("custom");
+  $("custom-food-name").focus();
+}
 function clearJatibabaEntry() {
   $("jatibaba-description").value = ""; $("jatibaba-calories").value = ""; $("jatibaba-photo").value = "";
   $("jatibaba-preview").hidden = true; $("jatibaba-preview").removeAttribute("src");
@@ -314,13 +409,14 @@ $("jatibaba-photo").addEventListener("change", event => {
 });
 
 $("cancel-meal-button").addEventListener("click", () => {
-  if (currentMealItems.length && !confirm("Discard the current unsaved meal?")) return;
-  currentMealItems = [];
-  renderCurrentMeal();
+  const action = editingMealId ? "Discard these meal changes?" : "Discard the current unsaved meal?";
+  if (currentMealItems.length && !confirm(action)) return;
+  prepareNewMeal();
   closeDialog("meal-dialog");
 });
 
 $("save-meal-button").addEventListener("click", () => {
+  if (isSavingMeal) return;
   const date = $("meal-date").value;
   const mealType = $("meal-type").value;
   const invalid = [];
@@ -346,20 +442,72 @@ $("save-meal-button").addEventListener("click", () => {
     focusFirstInvalid(invalid[0].field);
     return;
   }
-  savedMeals.push({
-    id: createUniqueId("meal"), date, mealType, items: structuredCloneSafe(currentMealItems),
-    totalCalories: calculateCurrentMealTotal(), savedAt: new Date().toISOString()
-  });
-  currentMealItems = [];
-  $("meal-type").value = "";
-  renderCurrentMeal();
-  saveAll();
-  updateDashboard();
-  renderMealHistory();
-  renderWeeklyProgress();
-  closeDialog("meal-dialog");
-  showMessage(`${mealType} saved successfully.`);
+  isSavingMeal = true;
+  try {
+    const mealData = {
+      date, mealType, items: structuredCloneSafe(currentMealItems),
+      totalCalories: calculateCurrentMealTotal(), updatedAt: new Date().toISOString()
+    };
+    const existing = editingMealId ? savedMeals.find(meal => meal.id === editingMealId) : null;
+    if (existing) Object.assign(existing, mealData);
+    else savedMeals.push({ id: createUniqueId("meal"), ...mealData, savedAt: new Date().toISOString() });
+    const message = existing ? `${mealType} updated successfully.` : `${mealType} saved successfully.`;
+    saveAll();
+    refreshApplicationUI();
+    prepareNewMeal();
+    closeDialog("meal-dialog");
+    showMessage(message);
+  } finally {
+    isSavingMeal = false;
+  }
 });
+
+function prepareNewMeal() {
+  editingMealId = null;
+  editingMealItemId = null;
+  currentMealItems = [];
+  $("meal-dialog-title").textContent = "Add Meal";
+  $("meal-dialog-description").textContent = "Everything you need without leaving Home.";
+  $("save-meal-button").textContent = "Save Meal";
+  $("meal-date").value = todayForInput;
+  $("meal-type").value = "";
+  $("recipe-selection").value = "";
+  $("serving-amount").value = 1;
+  clearCustomEntry();
+  clearJatibabaEntry();
+  selectEntryType("recipe");
+  renderCurrentMeal();
+  [$("meal-date"), $("meal-type"), $("current-meal-items")].forEach(clearFieldError);
+}
+
+function editMeal(mealId) {
+  const meal = savedMeals.find(item => item.id === mealId);
+  if (!meal) return showMessage("The selected meal could not be found.");
+  editingMealId = meal.id;
+  editingMealItemId = null;
+  currentMealItems = structuredCloneSafe(meal.items || []).map(normalizeMealItem);
+  $("meal-dialog-title").textContent = `Edit ${meal.mealType}`;
+  $("meal-dialog-description").textContent = "Update this saved meal without changing its meal ID.";
+  $("save-meal-button").textContent = "Save Meal Changes";
+  $("meal-date").value = meal.date;
+  $("meal-type").value = meal.mealType;
+  clearCustomEntry();
+  clearJatibabaEntry();
+  selectEntryType("recipe");
+  renderCurrentMeal();
+  openDialog("meal-dialog", "edit");
+}
+
+function deleteMeal(mealId) {
+  const meal = savedMeals.find(item => item.id === mealId);
+  if (!meal) return;
+  const dateLabel = meal.date ? formatDisplayDate(meal.date) : "its saved date";
+  if (!confirm(`Delete ${meal.mealType} from ${dateLabel}? This cannot be undone.`)) return;
+  savedMeals = savedMeals.filter(item => item.id !== meal.id);
+  saveAll();
+  refreshApplicationUI();
+  showMessage(`${meal.mealType} deleted.`);
+}
 
 // Dashboard
 function getMealsForDate(dateString) { return savedMeals.filter(meal => meal.date === dateString); }
@@ -384,15 +532,24 @@ function updateDashboard() {
 function renderDashboardMeals() {
   const meals = getMealsForDate(todayForInput);
   const container = $("dashboard-meals-container");
+  const summary = $("dashboard-meal-type-summary");
   if (!meals.length) {
+    summary.innerHTML = "";
     container.innerHTML = '<div class="empty-state"><span>🍽️</span><h4>No meals recorded today</h4><p>Tap Add Meal to begin tracking.</p></div>';
     return;
   }
+  const byType = meals.reduce((groups, meal) => {
+    groups[meal.mealType] = (groups[meal.mealType] || 0) + Number(meal.totalCalories || 0);
+    return groups;
+  }, {});
+  summary.innerHTML = Object.entries(byType).map(([type, calories]) => `<span><strong>${escapeHtml(type)}</strong> ${formatCalories(calories)}</span>`).join("");
   container.innerHTML = meals.map(meal => `
     <div class="dashboard-meal-card">
       <div class="dashboard-meal-heading"><div><h4>${escapeHtml(meal.mealType)}</h4><small>${formatDisplayDate(meal.date)}</small></div><strong>${formatCalories(meal.totalCalories)}</strong></div>
-      <ul class="dashboard-meal-items">${meal.items.map(item => `<li><span>${escapeHtml(item.name)}</span><strong>${formatCalories(item.calories)}</strong></li>`).join("")}</ul>
+      <ul class="dashboard-meal-items">${meal.items.length ? meal.items.map(item => `<li><span>${escapeHtml(item.name)}</span><strong>${formatCalories(item.calories)}</strong></li>`).join("") : '<li><span>Item details are not available for this older meal.</span></li>'}</ul>
+      <div class="meal-card-actions"><button class="secondary-button compact-button" data-edit-meal="${meal.id}">Edit</button><button class="delete-button compact-button" data-delete-meal="${meal.id}">Delete</button></div>
     </div>`).join("");
+  bindMealActions(container);
 }
 
 // History
@@ -409,15 +566,15 @@ function renderMealHistory() {
   container.innerHTML = meals.map(meal => `
     <article class="history-meal-card">
       <div class="history-meal-heading"><div><h3>${escapeHtml(meal.mealType)}</h3><small>${formatDisplayDate(meal.date)}</small></div><strong>${formatCalories(meal.totalCalories)}</strong></div>
-      <ul class="history-meal-items">${meal.items.map(item => `<li><div><strong>${escapeHtml(item.name)}</strong><br><small>${escapeHtml(item.details)}</small></div><strong>${formatCalories(item.calories)}</strong></li>`).join("")}</ul>
-      <div class="button-row"><button class="delete-meal-button" data-delete-meal="${meal.id}">Delete Meal</button></div>
+      <ul class="history-meal-items">${meal.items.length ? meal.items.map(item => `<li><div><strong>${escapeHtml(item.name)}</strong><br><small>${escapeHtml(item.details)}</small></div><strong>${formatCalories(item.calories)}</strong></li>`).join("") : '<li><span>Item details are not available for this older meal.</span></li>'}</ul>
+      <div class="meal-card-actions"><button class="secondary-button compact-button" data-edit-meal="${meal.id}">Edit Meal</button><button class="delete-button compact-button" data-delete-meal="${meal.id}">Delete Meal</button></div>
     </article>`).join("");
-  $all("[data-delete-meal]").forEach(button => button.addEventListener("click", () => {
-    const meal = savedMeals.find(item => item.id === button.dataset.deleteMeal);
-    if (!meal || !confirm(`Delete this ${meal.mealType} entry?`)) return;
-    savedMeals = savedMeals.filter(item => item.id !== meal.id);
-    saveAll(); updateDashboard(); renderMealHistory(); renderWeeklyProgress(); showMessage("Meal deleted.");
-  }));
+  bindMealActions(container);
+}
+
+function bindMealActions(container) {
+  container.querySelectorAll("[data-edit-meal]").forEach(button => button.addEventListener("click", () => editMeal(button.dataset.editMeal)));
+  container.querySelectorAll("[data-delete-meal]").forEach(button => button.addEventListener("click", () => deleteMeal(button.dataset.deleteMeal)));
 }
 
 // Recipe Builder
@@ -561,6 +718,7 @@ $("ignore-new-recipe-button").addEventListener("click", () => {
 });
 
 $("save-new-recipe-button").addEventListener("click", () => {
+  if (isSavingRecipe) return;
   const name = $("new-recipe-name").value.trim();
   const foodType = $("food-type").value;
   const category = $("recipe-category").value.trim();
@@ -593,36 +751,41 @@ $("save-new-recipe-button").addEventListener("click", () => {
     return;
   }
   if (savedRecipes.some(recipe => recipe.id !== editingRecipeId && normalize(recipe.name) === normalize(name))) return showMessage("A recipe with this name already exists.");
-  const ingredients = $all(".ingredient-entry-row").map(row => ({
-    name: row.querySelector(".ingredient-name-input").value.trim(),
-    quantity: Number(row.querySelector(".ingredient-quantity-input").value),
-    unit: row.querySelector(".ingredient-unit-input").value,
-    calories: Number(row.querySelector(".ingredient-total-input").value)
-  })).filter(item => item.name && item.quantity > 0);
-  const recipeData = {
-    name, foodType, category: category || "Uncategorized", ingredients,
-    totalServings: nutrition.servings,
-    totalCalories: Math.round(nutrition.total),
-    caloriesPerServing: Math.round(nutrition.perServing)
-  };
-  const editedRecipe = editingRecipeId ? savedRecipes.find(recipe => recipe.id === editingRecipeId) : null;
-  if (editedRecipe) {
-    Object.assign(editedRecipe, recipeData, { updatedAt: new Date().toISOString() });
-  } else {
-    savedRecipes.push({
-      id: `R${String(savedRecipes.length + 1).padStart(3, "0")}-${Date.now().toString(36)}`,
-      ...recipeData,
-      createdAt: new Date().toISOString()
-    });
+  isSavingRecipe = true;
+  try {
+    const ingredients = $all(".ingredient-entry-row").map(row => ({
+      name: row.querySelector(".ingredient-name-input").value.trim(),
+      quantity: Number(row.querySelector(".ingredient-quantity-input").value),
+      unit: row.querySelector(".ingredient-unit-input").value,
+      calories: Number(row.querySelector(".ingredient-total-input").value)
+    })).filter(item => item.name && item.quantity > 0);
+    const recipeData = {
+      name, foodType, category: category || "Uncategorized", ingredients,
+      totalServings: nutrition.servings,
+      totalCalories: Math.round(nutrition.total),
+      caloriesPerServing: Math.round(nutrition.perServing)
+    };
+    const editedRecipe = editingRecipeId ? savedRecipes.find(recipe => recipe.id === editingRecipeId) : null;
+    if (editedRecipe) {
+      Object.assign(editedRecipe, recipeData, { updatedAt: new Date().toISOString() });
+    } else {
+      savedRecipes.push({
+        id: `R${String(savedRecipes.length + 1).padStart(3, "0")}-${Date.now().toString(36)}`,
+        ...recipeData,
+        createdAt: new Date().toISOString()
+      });
+    }
+    const successMessage = editedRecipe ? `${name} updated successfully.` : `${name} added to the Recipe Master Database.`;
+    saveAll();
+    loadRecipeOptions();
+    populateRecipeFilters();
+    renderRecipeHandbook();
+    prepareNewRecipe();
+    closeDialog("recipe-dialog");
+    showMessage(successMessage);
+  } finally {
+    isSavingRecipe = false;
   }
-  const successMessage = editedRecipe ? `${name} updated successfully.` : `${name} added to the Recipe Master Database.`;
-  saveAll();
-  loadRecipeOptions();
-  populateRecipeFilters();
-  renderRecipeHandbook();
-  prepareNewRecipe();
-  closeDialog("recipe-dialog");
-  showMessage(successMessage);
 });
 
 // Recipe handbook
@@ -661,12 +824,16 @@ function renderRecipeHandbook() {
   });
   const container = $("recipe-handbook-container");
   if (!recipes.length) {
-    container.innerHTML = '<div class="empty-state"><span>📖</span><h4>No matching recipes</h4><p>Create a new recipe or change your search.</p></div>';
+    container.innerHTML = `<p class="recipe-result-count">Showing 0 of ${savedRecipes.length} recipes</p><div class="empty-state"><span>📖</span><h4>No matching recipes</h4><p>Create a new recipe or change your search.</p></div>`;
     return;
   }
-  container.innerHTML = `<p class="recipe-result-count">${recipes.length} recipe${recipes.length === 1 ? "" : "s"} shown</p><div class="recipe-grid">${recipes.map(recipe => `
+  const filtering = Boolean(query || foodType || category);
+  const countLabel = filtering
+    ? `Showing ${recipes.length} of ${savedRecipes.length} recipes`
+    : `${savedRecipes.length} recipe${savedRecipes.length === 1 ? "" : "s"}`;
+  container.innerHTML = `<p class="recipe-result-count">${countLabel}</p><div class="recipe-grid">${recipes.map(recipe => `
     <article class="recipe-card">
-      <div class="recipe-card-header"><div><h3>${escapeHtml(recipe.name)}</h3><small>${escapeHtml(recipe.category || "Uncategorized")}</small></div><strong>${formatCalories(recipe.caloriesPerServing)}</strong></div>
+      <div class="recipe-card-header"><div><h3>${escapeHtml(recipe.name)}</h3><small>Category: ${escapeHtml(recipe.category || "Uncategorized")}</small></div><strong>${formatCalories(recipe.caloriesPerServing)} / serving</strong></div>
       <div class="recipe-meta"><span class="badge">${escapeHtml(recipe.foodType)}</span><span class="badge">${recipe.totalServings} servings</span><span class="badge">${formatCalories(recipe.totalCalories)} total</span></div>
       <div class="recipe-card-actions"><button class="secondary-button compact-button" data-view-recipe="${recipe.id}">View Details</button><button class="primary-button compact-button" data-use-recipe="${recipe.id}">Add Meal</button><button class="secondary-button compact-button" data-edit-recipe="${recipe.id}">Edit Recipe</button><button class="delete-button compact-button" data-delete-recipe="${recipe.id}">Delete</button></div>
     </article>`).join("")}</div>`;
@@ -714,6 +881,7 @@ $("edit-recipe-from-details-button").addEventListener("click", () => {
 
 // Weight tracking
 $("save-weight-button").addEventListener("click", () => {
+  if (isSavingWeight) return;
   const date = $("weight-date").value;
   const weight = Number($("weight-value").value);
   const invalid = [];
@@ -733,18 +901,22 @@ $("save-weight-button").addEventListener("click", () => {
     return;
   }
 
-  const existing = weightHistory.find(record => record.date === date);
-  if (existing) existing.weight = weight;
-  else weightHistory.push({ id: createUniqueId("weight"), date, weight });
-  weightHistory.sort((a, b) => a.date.localeCompare(b.date));
-
-  if (date === todayForInput) applicationSettings.currentWeight = weight;
-  saveAll();
-  populateSettings();
-  updateDashboard();
-  renderWeeklyProgress();
-  closeDialog("weight-dialog");
-  showMessage(existing ? "Weight record updated." : "Weight saved.");
+  isSavingWeight = true;
+  try {
+    const existing = weightHistory.find(record => record.date === date);
+    if (existing) existing.weight = weight;
+    else weightHistory.push({ id: createUniqueId("weight"), date, weight });
+    weightHistory.sort((a, b) => a.date.localeCompare(b.date));
+    if (date === todayForInput) applicationSettings.currentWeight = weight;
+    saveAll();
+    populateSettings();
+    updateDashboard();
+    renderWeeklyProgress();
+    closeDialog("weight-dialog");
+    showMessage(existing ? "Weight record updated." : "Weight saved.");
+  } finally {
+    isSavingWeight = false;
+  }
 });
 
 // Progress charts
@@ -880,6 +1052,110 @@ $("save-settings-button").addEventListener("click", () => {
   if (!(target > 0 && current > 0 && goal > 0)) return showMessage("Please enter valid settings.");
   applicationSettings = { ...applicationSettings, dailyCalorieTarget: target, currentWeight: current, goalWeight: goal };
   saveAll(); updateDashboard(); renderWeeklyProgress(); showMessage("Settings saved.");
+});
+
+function refreshApplicationUI() {
+  populateSettings();
+  loadRecipeOptions();
+  populateRecipeFilters();
+  updateDashboard();
+  renderMealHistory();
+  renderRecipeHandbook();
+  renderWeeklyProgress();
+}
+
+function buildBackupData() {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    application: "Soumya Healthy Diet Planner",
+    meals: structuredCloneSafe(savedMeals),
+    recipes: structuredCloneSafe(savedRecipes),
+    settings: structuredCloneSafe(applicationSettings),
+    weightHistory: structuredCloneSafe(weightHistory)
+  };
+}
+
+function getBackupFilename() {
+  return `soumya-healthy-diet-planner-backup-${getLocalDateString(new Date())}.json`;
+}
+
+$("export-data-button").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(buildBackupData(), null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = getBackupFilename();
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showMessage("Backup exported successfully.");
+});
+
+function prepareImportedData(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("The selected file is not a valid backup object.");
+  const version = Number(data.schemaVersion);
+  if (!Number.isInteger(version) || version < 1 || version > SCHEMA_VERSION) throw new Error("This backup uses an unsupported schema version.");
+  if (!Array.isArray(data.meals)) throw new Error("The backup does not contain a valid meals list.");
+  if (!Array.isArray(data.recipes)) throw new Error("The backup does not contain a valid recipes list.");
+  if (!data.settings || typeof data.settings !== "object" || Array.isArray(data.settings)) throw new Error("The backup does not contain valid settings.");
+  if (!Array.isArray(data.weightHistory)) throw new Error("The backup does not contain a valid weight-history list.");
+  return {
+    meals: normalizeMealCollection(data.meals),
+    recipes: normalizeRecipeCollection(data.recipes),
+    settings: normalizeSettings(data.settings),
+    weightHistory: normalizeWeightCollection(data.weightHistory),
+    metadata: normalizeMetadata({ schemaVersion: version, importedAt: new Date().toISOString() })
+  };
+}
+
+$("import-data-input").addEventListener("change", async event => {
+  const file = event.target.files?.[0];
+  if (!file || isImportingData) return;
+  isImportingData = true;
+  try {
+    const data = JSON.parse(await file.text());
+    const prepared = prepareImportedData(data);
+    const summary = [
+      `${prepared.meals.length} meal${prepared.meals.length === 1 ? "" : "s"}`,
+      `${prepared.recipes.length} recipe${prepared.recipes.length === 1 ? "" : "s"}`,
+      `${prepared.weightHistory.length} weight record${prepared.weightHistory.length === 1 ? "" : "s"}`
+    ].join(", ");
+    if (!confirm(`Import this backup containing ${summary}? This will replace the app data currently stored on this device.`)) return;
+    savedMeals = prepared.meals;
+    savedRecipes = prepared.recipes;
+    applicationSettings = prepared.settings;
+    weightHistory = prepared.weightHistory;
+    applicationMetadata = prepared.metadata;
+    saveAll();
+    refreshApplicationUI();
+    showMessage("Backup imported successfully.");
+  } catch (error) {
+    console.error("Unable to import backup", error);
+    showMessage(`Import failed: ${error.message || "invalid backup file"}`);
+  } finally {
+    isImportingData = false;
+    event.target.value = "";
+  }
+});
+
+$("reset-data-button").addEventListener("click", () => {
+  if (!confirm("Reset all application data? Meals and weight history will be cleared, recipes will return to the starter set, and settings will return to defaults.")) return;
+  if (prompt('Type RESET to confirm. This action cannot be undone.') !== "RESET") {
+    showMessage("Reset cancelled. Type RESET exactly to confirm.");
+    return;
+  }
+  savedMeals = [];
+  savedRecipes = normalizeRecipeCollection(structuredCloneSafe(recipeDatabase));
+  applicationSettings = normalizeSettings(defaultSettings);
+  weightHistory = [];
+  applicationMetadata = normalizeMetadata({ resetAt: new Date().toISOString() });
+  prepareNewMeal();
+  prepareNewRecipe();
+  saveAll();
+  refreshApplicationUI();
+  showMessage("Application data reset to starter defaults.");
 });
 
 // Initial application start
