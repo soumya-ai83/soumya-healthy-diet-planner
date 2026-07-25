@@ -71,7 +71,7 @@
     </section>
 
     <section id="recipe-handbook" class="app-page">
-      <div class="page-heading"><div><h2>Recipe Handbook</h2><p>Your measured recipes and calorie calculations.</p></div><button class="primary-button" data-open-dialog="recipe-dialog">+ New Recipe</button></div>
+      <div class="page-heading recipe-handbook-heading"><div><h2>Recipe Handbook</h2><p id="recipe-saved-count">0 recipes saved</p></div><button class="primary-button" data-open-dialog="recipe-dialog">+ New Recipe</button></div>
       <article class="panel">
         <div class="recipe-toolbar">
           <div class="form-group"><label for="recipe-search">Search by recipe name</label><input id="recipe-search" type="search" placeholder="Search recipes…"></div>
@@ -145,7 +145,7 @@
       <header class="dialog-header"><div><span class="eyebrow">RECIPE HANDBOOK</span><h2 id="recipe-details-title">Recipe Details</h2><p>Measured recipe information saved in your handbook.</p></div><button class="dialog-close" data-close-dialog="recipe-details-dialog" aria-label="Close">×</button></header>
       <div class="dialog-content">
         <div id="recipe-details-content"></div>
-        <div class="button-row sticky-actions"><button class="secondary-button" data-close-dialog="recipe-details-dialog">Close</button><button class="primary-button" id="edit-recipe-from-details-button">Edit Recipe</button></div>
+        <div class="button-row sticky-actions recipe-detail-actions"><button class="primary-button" id="add-meal-from-details-button">Add Meal</button><button class="secondary-button" id="edit-recipe-from-details-button">Edit Recipe</button><button class="delete-button" id="delete-recipe-from-details-button">Delete</button></div>
       </div>
     </div>
   </dialog>
