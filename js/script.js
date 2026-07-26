@@ -97,9 +97,17 @@ function getRecipeCategoryValue(recipe) {
     recipe.category,
     recipe.Category,
     recipe.recipeCategory,
-    recipe["Recipe Category"]
+    recipe["Recipe Category"],
+    recipe.foodCategory,
+    recipe.type
   ];
-  return candidates.find(value => String(value ?? "").trim()) ?? "";
+  for (const candidate of candidates) {
+    const value = candidate && typeof candidate === "object"
+      ? candidate.name ?? candidate.label ?? candidate.value
+      : candidate;
+    if (String(value ?? "").trim()) return value;
+  }
+  return "";
 }
 
 function normalizeCategoryLabel(value) {
@@ -951,13 +959,14 @@ let recipeHandbookPage = 1;
   });
 });
 
-function populateRecipeFilters() {
+function populateRecipeFilters(recipes = savedRecipes) {
   const foodTypeSelect = $("recipe-food-type-filter");
   const categorySelect = $("recipe-category-filter");
   const selectedFoodType = foodTypeSelect.value;
   const selectedCategoryKey = normalizeCategoryKey(categorySelect.value);
-  const foodTypes = [...new Set(savedRecipes.map(recipe => recipe.foodType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const categories = collectRecipeCategories(savedRecipes);
+  const completeRecipeCollection = Array.isArray(recipes) ? recipes : [];
+  const foodTypes = [...new Set(completeRecipeCollection.map(recipe => recipe.foodType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const categories = collectRecipeCategories(completeRecipeCollection);
   foodTypeSelect.innerHTML = '<option value="">All food types</option>' + foodTypes.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("");
   categorySelect.innerHTML = '<option value="">All categories</option>' + categories
     .map(({ key, label }) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`)
@@ -972,6 +981,7 @@ function populateRecipeFilters() {
 }
 
 function renderRecipeHandbook() {
+  populateRecipeFilters(savedRecipes);
   $("recipe-saved-count").textContent = `${savedRecipes.length} recipe${savedRecipes.length === 1 ? "" : "s"} saved`;
   const query = normalize($("recipe-search").value);
   const foodType = normalize($("recipe-food-type-filter").value);
