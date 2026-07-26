@@ -261,7 +261,7 @@ $("current-date").textContent = today.toLocaleDateString("en-US", {
 });
 $("current-date").dateTime = todayForInput;
 $("mobile-current-date").textContent = today.toLocaleDateString("en-US", {
-  weekday: "short", month: "short", day: "numeric"
+  weekday: "short", month: "long", day: "numeric"
 });
 $("mobile-current-date").dateTime = todayForInput;
 const hour = today.getHours();
