@@ -271,6 +271,20 @@ $("weight-value").value = applicationSettings.currentWeight;
 function openPage(pageName) {
   $all(".app-page").forEach(page => page.classList.remove("active-page"));
   $all(".nav-button").forEach(button => button.classList.toggle("active", button.dataset.page === pageName));
+  const mobilePageLabels = {
+    dashboard: "Home",
+    "meal-history": "Meals",
+    "recipe-handbook": "Recipes",
+    progress: "Progress",
+    settings: "More"
+  };
+  $all(".mobile-nav-button").forEach(button => {
+    const isActive = button.dataset.mobilePage === pageName;
+    button.classList.toggle("active", isActive);
+    if (isActive) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+  if ($("mobile-page-title")) $("mobile-page-title").textContent = mobilePageLabels[pageName] || "Healthy Diet Planner";
   const page = $(pageName);
   if (page) page.classList.add("active-page");
   if (pageName === "meal-history") renderMealHistory();
@@ -280,6 +294,7 @@ function openPage(pageName) {
 }
 
 $all(".nav-button").forEach(button => button.addEventListener("click", () => openPage(button.dataset.page)));
+$all(".mobile-nav-button").forEach(button => button.addEventListener("click", () => openPage(button.dataset.mobilePage)));
 $all("[data-dashboard-page]").forEach(button => button.addEventListener("click", () => openPage(button.dataset.dashboardPage)));
 
 // Dialog controls

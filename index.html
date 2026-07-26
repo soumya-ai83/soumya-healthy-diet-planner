@@ -24,6 +24,14 @@
     </div>
   </nav>
 
+  <header class="mobile-app-header">
+    <span class="mobile-app-mark" aria-hidden="true">S</span>
+    <div>
+      <strong>Healthy Diet Planner</strong>
+      <span id="mobile-page-title">Home</span>
+    </div>
+  </header>
+
   <main class="app-container">
     <section id="dashboard" class="app-page active-page">
       <section class="dashboard-hero" aria-labelledby="dashboard-title">
@@ -174,6 +182,29 @@
       </article>
     </section>
   </main>
+
+  <nav class="mobile-bottom-navigation" aria-label="Mobile navigation">
+    <button class="mobile-nav-button active" data-mobile-page="dashboard" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="mobile-nav-button" data-mobile-page="meal-history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v4M17 3v4M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1ZM8 13h3M13 13h3M8 17h3"/></svg>
+      <span>Meals</span>
+    </button>
+    <button class="mobile-nav-button" data-mobile-page="recipe-handbook">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H7a2 2 0 0 1-2-2V4Zm0 13.5A2.5 2.5 0 0 1 7.5 15H19M9 8h6M9 11h5"/></svg>
+      <span>Recipes</span>
+    </button>
+    <button class="mobile-nav-button" data-mobile-page="progress">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-8M22 19H2"/></svg>
+      <span>Progress</span>
+    </button>
+    <button class="mobile-nav-button" data-mobile-page="settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+      <span>More</span>
+    </button>
+  </nav>
 
   <dialog id="meal-dialog" class="app-dialog">
     <div class="dialog-shell">
