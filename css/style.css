@@ -1449,13 +1449,24 @@ body{background:var(--dashboard-cream)}
 .mobile-app-header,.mobile-bottom-navigation{display:none}
 
 @media(max-width:800px){
-  html{scroll-padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+  html{
+    height:auto;
+    min-height:100%;
+    overflow-x:hidden;
+    overflow-y:auto;
+    scroll-padding-bottom:calc(92px + env(safe-area-inset-bottom));
+  }
   body{
+    height:auto;
+    min-height:100%;
     min-width:320px;
-    padding:0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
+    padding:0 env(safe-area-inset-right) calc(12px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+    overflow-x:hidden;
+    overflow-y:visible;
     background:var(--dashboard-cream);
     font-size:16px;
-    overscroll-behavior-y:none;
+    overscroll-behavior-y:auto;
+    touch-action:pan-y;
   }
   body:has(.app-dialog[open]){overflow:hidden}
   button,input,select,textarea{font-size:16px}
@@ -1548,9 +1559,12 @@ body{background:var(--dashboard-cream)}
 
   .app-container{
     width:min(100% - 24px,720px);
+    min-height:0;
     margin:0 auto;
-    padding:14px 0 calc(94px + env(safe-area-inset-bottom));
+    padding:14px 0 calc(112px + env(safe-area-inset-bottom));
+    overflow:visible;
   }
+  .app-page,.active-page{min-height:0;overflow:visible}
   .page-heading{align-items:center;margin-bottom:14px}
   .page-heading h2{font-size:clamp(1.5rem,6vw,1.8rem);line-height:1.15}
   .page-heading p{font-size:.9rem}
@@ -1915,11 +1929,20 @@ body{background:var(--dashboard-cream)}
     width:145px;
   }
   #dashboard .hero-greeting{
-    right:8px;
+    right:auto;
     bottom:7px;
-    width:113px;
+    left:9px;
+    width:108px;
     padding:7px 8px;
-    border-radius:15px 15px 15px 7px;
+    border-radius:15px 15px 7px 15px;
+  }
+  #dashboard .hero-greeting::before{
+    right:-12px;
+    bottom:13px;
+    left:auto;
+    width:15px;
+    height:17px;
+    clip-path:polygon(0 0,100% 50%,0 100%);
   }
   #dashboard .hero-greeting strong{
     font-size:.63rem;
@@ -2078,7 +2101,7 @@ body{background:var(--dashboard-cream)}
   #dashboard .dashboard-hero-copy{padding-left:11px}
   #dashboard .dashboard-hero h1{font-size:1.22rem}
   #dashboard .dashboard-hero-character{right:-5px}
-  #dashboard .hero-greeting{right:5px;width:107px}
+  #dashboard .hero-greeting{right:auto;left:7px;width:103px}
   #dashboard .dashboard-summary-grid{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:6px}
   #dashboard .dashboard-summary-card{padding:10px}
   #dashboard .summary-card-heading .card-label{font-size:.64rem}
