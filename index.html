@@ -83,7 +83,8 @@
           <strong id="greeting">Good morning,<br><span>Soumya! 👋</span></strong>
           <p>You're doing amazing!<br>One healthy choice<br>at a time. <span aria-hidden="true">💚</span></p>
         </div>
-        <span class="dashboard-date" id="current-date">Loading…</span>
+        <time class="dashboard-date" id="current-date">Loading…</time>
+        <time class="mobile-dashboard-date" id="mobile-current-date">Loading…</time>
         <div class="hero-ai-decoration" aria-hidden="true">
           <span class="ai-mark">AI</span>
           <svg viewBox="0 0 210 125" preserveAspectRatio="none">
@@ -212,7 +213,7 @@
       <div class="dialog-content">
         <div class="form-grid"><div class="form-group"><label for="meal-date">Date</label><input type="date" id="meal-date"></div><div class="form-group"><label for="meal-type">Meal Type</label><select id="meal-type"><option value="">Select meal type</option><option>Breakfast</option><option>Morning Snack</option><option>Lunch</option><option>Evening Snack</option><option>Dinner</option></select></div></div>
         <h3 class="section-title">Choose Entry Type</h3>
-        <div class="entry-type-grid"><button class="entry-type-card active" data-entry-type="recipe"><span>📚</span><strong>Recipe</strong><small>From Handbook</small></button><button class="entry-type-card" data-entry-type="custom"><span>✏️</span><strong>Manual</strong><small>Food + calories</small></button><button class="entry-type-card" data-entry-type="jatibaba"><span>✨</span><strong>JatiaBaba</strong><small>Photo + estimate</small></button></div>
+        <div class="entry-type-grid"><button class="entry-type-card active" data-entry-type="recipe"><span>📚</span><strong>Recipe</strong><small>From Handbook</small></button><button class="entry-type-card" data-entry-type="custom"><span>✏️</span><strong>Manual</strong><small>Food + calories</small></button><button class="entry-type-card" data-entry-type="jatibaba"><span class="jatibaba-ai-tab-icon" aria-hidden="true"><img src="assets/jatiababa/jatiababa-hero.png" alt=""><i>✦</i></span><strong>JatiaBaba</strong><small>Photo + estimate</small></button></div>
 
         <section id="recipe-entry" class="entry-panel active-entry-panel"><div class="form-grid"><div class="form-group"><label for="recipe-selection">Select Recipe</label><select id="recipe-selection"><option value="">Choose a saved recipe</option></select></div><div class="form-group"><label for="serving-amount">Serving Amount</label><input type="number" id="serving-amount" min="0.25" step="0.25" value="1"></div></div><div class="button-row"><button class="primary-button" id="add-recipe-item-button">Add to Meal</button><button class="secondary-button" id="ignore-recipe-button">Clear</button></div></section>
 
