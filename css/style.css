@@ -1446,7 +1446,7 @@ body{background:var(--dashboard-cream)}
 }
 
 /* Version 1.2 mobile usability */
-.mobile-app-header,.mobile-bottom-navigation{display:none}
+.mobile-app-header,.mobile-bottom-navigation,.mobile-dashboard-date{display:none}
 
 @media(max-width:800px){
   html{
@@ -1888,6 +1888,80 @@ body{background:var(--dashboard-cream)}
     height:138px;
     margin-bottom:9px;
     border-radius:16px;
+    background:
+      radial-gradient(circle at 70% 18%,rgba(255,255,255,.6) 0 1px,transparent 2px),
+      radial-gradient(circle at 52% 74%,rgba(36,126,79,.13),transparent 28%),
+      linear-gradient(135deg,#fff9e9 0%,#eef1bf 58%,#8ac893 100%);
+    background-size:23px 23px,auto,auto;
+  }
+  #dashboard .hero-botanical-layer{
+    position:absolute;
+    inset:0;
+    z-index:1;
+    display:block;
+    width:100%;
+    height:100%;
+    opacity:.18;
+    pointer-events:none;
+  }
+  #dashboard .botanical-top,#dashboard .botanical-bottom,#dashboard .botanical-center{
+    fill:rgba(34,126,70,.2);
+    stroke:rgba(23,107,82,.42);
+    stroke-width:2;
+    stroke-linecap:round;
+  }
+  #dashboard .botanical-top path:first-child,
+  #dashboard .botanical-bottom path:first-child,
+  #dashboard .botanical-center path:first-child{fill:none}
+  #dashboard .botanical-sparkles{
+    fill:rgba(255,255,255,.72);
+    stroke:rgba(255,255,255,.7);
+  }
+  #dashboard .hero-ai-decoration{
+    z-index:2;
+    top:0;
+    right:-5px;
+    display:block;
+    width:155px;
+    height:92px;
+    opacity:.32;
+    pointer-events:none;
+  }
+  #dashboard .hero-ai-decoration .ai-mark{display:none}
+  #dashboard .hero-ai-decoration .ai-lines{stroke:rgba(255,255,255,.58)}
+  #dashboard .hero-ai-decoration .ai-nodes{fill:rgba(255,255,255,.82)}
+  #dashboard .hero-ai-decoration .ai-stars{stroke:rgba(255,255,255,.76)}
+  #dashboard .dashboard-date{display:none}
+  #dashboard .mobile-dashboard-date{
+    position:absolute;
+    z-index:7;
+    top:6px;
+    right:auto;
+    left:50%;
+    display:flex;
+    width:auto;
+    min-height:23px;
+    align-items:center;
+    gap:4px;
+    margin:0;
+    padding:3px 5px;
+    border:1px solid rgba(255,255,255,.42);
+    border-radius:9px;
+    background:rgba(255,255,255,.48);
+    color:#19533f;
+    font-size:.52rem;
+    font-weight:750;
+    line-height:1.15;
+    text-align:left;
+    white-space:nowrap;
+    transform:translateX(-16%);
+    backdrop-filter:blur(3px);
+  }
+  #dashboard .mobile-dashboard-date::before{
+    content:"▣";
+    flex:0 0 auto;
+    color:#247455;
+    font-size:.62rem;
   }
   #dashboard .dashboard-hero-copy{
     padding:15px 0 10px 14px;
@@ -1895,29 +1969,28 @@ body{background:var(--dashboard-cream)}
   #dashboard .hero-brand{
     display:flex;
     align-items:center;
-    gap:8px;
+    gap:10px;
   }
   #dashboard .hero-leaf-mark{
-    width:32px;
-    height:32px;
-    flex:0 0 32px;
+    width:34px;
+    height:34px;
+    flex:0 0 34px;
     margin:0;
     border-radius:8px;
   }
-  #dashboard .hero-leaf-mark svg{width:23px;height:23px}
+  #dashboard .hero-leaf-mark svg{width:24px;height:24px}
   #dashboard .dashboard-hero h1{
     font-size:1.34rem;
     line-height:1;
   }
   #dashboard .dashboard-hero h1 small{
     max-width:none;
-    margin-top:5px;
+    margin-top:6px;
     font-size:.53em;
     line-height:1.15;
     white-space:nowrap;
   }
   #dashboard .dashboard-hero-copy>p{display:none}
-  #dashboard .dashboard-date{display:none}
   #dashboard .dashboard-hero-character{
     right:2px;
     bottom:-16px;
@@ -2101,6 +2174,11 @@ body{background:var(--dashboard-cream)}
   #dashboard .dashboard-hero-copy{padding-left:11px}
   #dashboard .dashboard-hero h1{font-size:1.22rem}
   #dashboard .dashboard-hero-character{right:-5px}
+  #dashboard .mobile-dashboard-date{
+    left:48%;
+    font-size:.48rem;
+    transform:translateX(-10%);
+  }
   #dashboard .hero-greeting{right:auto;left:7px;width:103px}
   #dashboard .dashboard-summary-grid{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:6px}
   #dashboard .dashboard-summary-card{padding:10px}
@@ -2114,4 +2192,56 @@ body{background:var(--dashboard-cream)}
   #dashboard .jatiababa-action{padding-left:56px}
   #dashboard .jatiababa-action img{width:86px}
   #dashboard .today-meals-section .dashboard-section-heading button{font-size:.72rem}
+}
+
+/* JatiaBaba AI source-tab icon */
+.jatibaba-ai-tab-icon{
+  position:relative;
+  display:block;
+  width:38px;
+  height:38px;
+  overflow:hidden;
+  border:1px solid rgba(23,107,82,.2);
+  border-radius:50%;
+  background:linear-gradient(145deg,#fff8d9,#dff2df);
+  box-shadow:0 2px 7px rgba(23,107,82,.12);
+}
+.jatibaba-ai-tab-icon img{
+  position:absolute;
+  top:0;
+  left:50%;
+  width:55px;
+  height:auto;
+  max-width:none;
+  transform:translateX(-56%);
+}
+.jatibaba-ai-tab-icon i{
+  position:absolute;
+  z-index:2;
+  top:-2px;
+  right:-1px;
+  display:grid;
+  place-items:center;
+  width:14px;
+  height:14px;
+  border-radius:50%;
+  background:#fff;
+  color:#168452;
+  font-size:.62rem;
+  font-style:normal;
+  line-height:1;
+  box-shadow:0 1px 4px rgba(23,107,82,.18);
+}
+.entry-type-card.active .jatibaba-ai-tab-icon{
+  border-color:var(--primary);
+  box-shadow:0 0 0 2px rgba(23,107,82,.13);
+}
+
+@media(max-width:800px){
+  .entry-type-card .jatibaba-ai-tab-icon{
+    grid-row:auto;
+    width:36px;
+    height:36px;
+    margin:0 auto;
+  }
 }
