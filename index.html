@@ -24,18 +24,31 @@
     <section id="dashboard" class="app-page active-page">
       <section class="dashboard-hero" aria-labelledby="dashboard-title">
         <div class="dashboard-hero-copy">
-          <span class="dashboard-date" id="current-date">Loading…</span>
-          <span class="dashboard-kicker">Your everyday health companion</span>
-          <h1 id="dashboard-title">Soumya Healthy Diet Planner</h1>
-          <p>Track meals, monitor progress, and build healthier habits every day.</p>
-          <div class="hero-greeting">
-            <strong id="greeting">Good morning, Soumya!</strong>
-            <span>You're doing amazing. One healthy choice at a time.</span>
+          <div class="hero-brand">
+            <span class="hero-leaf-mark" aria-hidden="true">
+              <svg viewBox="0 0 48 48"><path d="M25 37V18M25 27c-8 0-13-5-14-13 8 0 13 4 14 13Zm1-9C27 10 32 6 40 6c0 8-5 13-14 12Z"/><path d="M18 35h14"/></svg>
+            </span>
+            <h1 id="dashboard-title"><span>Soumya</span><small>Healthy Diet Planner</small></h1>
           </div>
+          <div class="hero-divider" aria-hidden="true"><span></span><svg viewBox="0 0 24 24"><path d="M12 21c-4-4-6-8-5-12 1-3 3-5 6-6 3 4 4 8 2 12-1 2-2 4-3 6Zm0 0v-9"/></svg><span></span></div>
+          <p>Track meals, monitor progress, and build healthier habits every day.</p>
         </div>
         <div class="dashboard-hero-character">
           <img src="assets/jatiababa/jatiababa-hero.png" alt="JatiaBaba smiling and giving a welcoming gesture">
-          <span class="character-name">JatiaBaba</span>
+        </div>
+        <div class="hero-greeting">
+          <strong id="greeting">Good morning,<br><span>Soumya! 👋</span></strong>
+          <p>You're doing amazing!<br>One healthy choice<br>at a time. <span aria-hidden="true">💚</span></p>
+        </div>
+        <span class="dashboard-date" id="current-date">Loading…</span>
+        <div class="hero-ai-decoration" aria-hidden="true">
+          <span class="ai-mark">AI</span>
+          <svg viewBox="0 0 180 105" preserveAspectRatio="none"><path d="M8 26 44 12l32 25 34-20 55 20M22 79l38-22 41 18 29-29 41 26"/><g><circle cx="8" cy="26" r="2"/><circle cx="44" cy="12" r="3"/><circle cx="76" cy="37" r="2"/><circle cx="110" cy="17" r="2"/><circle cx="165" cy="37" r="3"/><circle cx="22" cy="79" r="2"/><circle cx="60" cy="57" r="3"/><circle cx="101" cy="75" r="2"/><circle cx="130" cy="46" r="3"/><circle cx="171" cy="72" r="2"/></g></svg>
+        </div>
+        <div class="hero-lifestyle" aria-hidden="true">
+          <span class="hero-cup">♡</span>
+          <span class="hero-plant"><i></i><i></i><i></i><i></i><b></b></span>
+          <span class="hero-pot"></span>
         </div>
       </section>
 
@@ -60,9 +73,9 @@
       <section class="dashboard-section dashboard-quick-actions" aria-labelledby="quick-actions-title">
         <div class="dashboard-section-heading"><div><span class="dashboard-kicker">Shortcuts</span><h2 id="quick-actions-title">Quick Actions</h2></div></div>
         <div class="quick-action-grid">
-          <button class="dashboard-action-tile add-meal-action" data-open-dialog="meal-dialog"><span class="action-tile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3v8M3 7h6M6 11v10M14 4v17M14 12c4 0 5-3 5-5V4c-3 0-5 3-5 8Z"/></svg></span><span><strong>Add Meal</strong><small>Log what you ate</small></span><span class="action-arrow" aria-hidden="true">→</span></button>
+          <button class="dashboard-action-tile add-meal-action" data-open-dialog="meal-dialog"><span class="action-tile-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 17h22c-1 7-5 10-11 10S6 24 5 17Zm3 10h16M10 13c-2-2 1-4 0-7m6 7c-2-2 1-4 0-8m6 8c-2-2 1-4 0-7"/></svg></span><span><strong>Add Meal</strong><small>Log what you ate</small></span><span class="action-arrow" aria-hidden="true">→</span></button>
           <button class="dashboard-action-tile" data-dashboard-page="recipe-handbook"><span class="action-tile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H7a2 2 0 0 1-2-2V4Zm0 13.5A2.5 2.5 0 0 1 7.5 15H19M9 8h6M9 11h5"/></svg></span><span><strong>Recipe Handbook</strong><small>Browse saved recipes</small></span><span class="action-arrow" aria-hidden="true">→</span></button>
-          <button class="dashboard-action-tile" data-open-dialog="recipe-dialog"><span class="action-tile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span><strong>New Recipe</strong><small>Build a measured recipe</small></span><span class="action-arrow" aria-hidden="true">→</span></button>
+          <button class="dashboard-action-tile" data-open-dialog="recipe-dialog"><span class="action-tile-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M9 15c-4 0-5-3-4-6 1-3 5-4 7-2 1-4 7-4 8 0 3-2 7 0 7 4 0 3-2 5-5 5v11H10V15Zm1 8h12M13 19v4"/></svg></span><span><strong>New Recipe</strong><small>Build a measured recipe</small></span><span class="action-arrow" aria-hidden="true">→</span></button>
           <button class="dashboard-action-tile jatiababa-action" data-open-dialog="meal-dialog" data-entry="jatibaba">
             <img src="assets/jatiababa/jatiababa-ask.png" alt="JatiaBaba inviting the user to ask a question">
             <span><strong>Ask JatiaBaba</strong><small>How can I help today?</small></span><span class="action-arrow" aria-hidden="true">→</span>

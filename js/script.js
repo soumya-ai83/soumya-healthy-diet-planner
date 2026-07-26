@@ -260,7 +260,8 @@ $("current-date").textContent = today.toLocaleDateString("en-US", {
   weekday: "long", year: "numeric", month: "long", day: "numeric"
 });
 const hour = today.getHours();
-$("greeting").textContent = `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, Soumya!`;
+const greetingPeriod = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+$("greeting").innerHTML = `${greetingPeriod},<br><span>Soumya! 👋</span>`;
 $("meal-date").value = todayForInput;
 $("history-date").value = todayForInput;
 $("weight-date").value = todayForInput;
