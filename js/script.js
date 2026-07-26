@@ -91,6 +91,41 @@ function structuredCloneSafe(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function getRecipeCategoryValue(recipe) {
+  if (!recipe || typeof recipe !== "object") return "";
+  const candidates = [
+    recipe.category,
+    recipe.Category,
+    recipe.recipeCategory,
+    recipe["Recipe Category"]
+  ];
+  return candidates.find(value => String(value ?? "").trim()) ?? "";
+}
+
+function normalizeCategoryLabel(value) {
+  const label = String(value ?? "").trim().replace(/\s+/g, " ");
+  return label || "Uncategorized";
+}
+
+function normalizeCategoryKey(value) {
+  const label = String(value ?? "").trim().replace(/\s+/g, " ");
+  return label ? normalize(label) : "";
+}
+
+function collectRecipeCategories(recipes) {
+  const categoriesByKey = new Map();
+
+  (Array.isArray(recipes) ? recipes : []).forEach(recipe => {
+    const label = normalizeCategoryLabel(getRecipeCategoryValue(recipe));
+    const key = normalizeCategoryKey(label);
+    if (!categoriesByKey.has(key)) categoriesByKey.set(key, label);
+  });
+
+  return Array.from(categoriesByKey, ([key, label]) => ({ key, label })).sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { sensitivity: "base" })
+  );
+}
+
 function normalizeRecipeRecord(recipe, index = 0) {
   const normalized = recipe && typeof recipe === "object" ? { ...recipe } : {};
   return {
@@ -98,7 +133,7 @@ function normalizeRecipeRecord(recipe, index = 0) {
     id: normalized.id || `R-legacy-${index + 1}`,
     name: String(normalized.name || "Untitled Recipe").trim(),
     foodType: String(normalized.foodType || "Unspecified").trim(),
-    category: String(normalized.category || "Uncategorized").trim(),
+    category: normalizeCategoryLabel(getRecipeCategoryValue(normalized)),
     totalServings: Number(normalized.totalServings) > 0 ? Number(normalized.totalServings) : 1,
     totalCalories: Number(normalized.totalCalories) || 0,
     caloriesPerServing: Number(normalized.caloriesPerServing) || 0,
@@ -920,25 +955,32 @@ function populateRecipeFilters() {
   const foodTypeSelect = $("recipe-food-type-filter");
   const categorySelect = $("recipe-category-filter");
   const selectedFoodType = foodTypeSelect.value;
-  const selectedCategory = categorySelect.value;
+  const selectedCategoryKey = normalizeCategoryKey(categorySelect.value);
   const foodTypes = [...new Set(savedRecipes.map(recipe => recipe.foodType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const categories = [...new Set(savedRecipes.map(recipe => recipe.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const categories = collectRecipeCategories(savedRecipes);
   foodTypeSelect.innerHTML = '<option value="">All food types</option>' + foodTypes.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("");
-  categorySelect.innerHTML = '<option value="">All categories</option>' + categories.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("");
+  categorySelect.innerHTML = '<option value="">All categories</option>' + categories
+    .map(({ key, label }) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`)
+    .join("");
   if (foodTypes.includes(selectedFoodType)) foodTypeSelect.value = selectedFoodType;
-  if (categories.includes(selectedCategory)) categorySelect.value = selectedCategory;
+  if (categories.some(({ key }) => key === selectedCategoryKey)) {
+    categorySelect.value = selectedCategoryKey;
+  } else if (selectedCategoryKey) {
+    categorySelect.value = "";
+    recipeHandbookPage = 1;
+  }
 }
 
 function renderRecipeHandbook() {
   $("recipe-saved-count").textContent = `${savedRecipes.length} recipe${savedRecipes.length === 1 ? "" : "s"} saved`;
   const query = normalize($("recipe-search").value);
   const foodType = normalize($("recipe-food-type-filter").value);
-  const category = normalize($("recipe-category-filter").value);
+  const category = normalizeCategoryKey($("recipe-category-filter").value);
   const sortMode = $("recipe-sort").value;
   const recipes = savedRecipes.filter(recipe =>
     (!query || normalize(recipe.name).includes(query)) &&
     (!foodType || normalize(recipe.foodType) === foodType) &&
-    (!category || normalize(recipe.category) === category)
+    (!category || normalizeCategoryKey(normalizeCategoryLabel(getRecipeCategoryValue(recipe))) === category)
   );
   recipes.sort((a, b) => {
     if (sortMode === "name-desc") return b.name.localeCompare(a.name);
@@ -972,8 +1014,8 @@ function renderRecipeHandbook() {
       </div>
       ${pageRecipes.map(recipe => `
         <div class="recipe-list-row" role="row">
-          <div class="recipe-list-name" role="cell"><strong>${escapeHtml(recipe.name)}</strong><span class="recipe-mobile-meta">${escapeHtml(recipe.category || "Uncategorized")} • ${escapeHtml(recipe.foodType || "Unspecified")}</span></div>
-          <span class="recipe-list-category" role="cell">${escapeHtml(recipe.category || "Uncategorized")}</span>
+          <div class="recipe-list-name" role="cell"><strong>${escapeHtml(recipe.name)}</strong><span class="recipe-mobile-meta">${escapeHtml(normalizeCategoryLabel(getRecipeCategoryValue(recipe)))} • ${escapeHtml(recipe.foodType || "Unspecified")}</span></div>
+          <span class="recipe-list-category" role="cell">${escapeHtml(normalizeCategoryLabel(getRecipeCategoryValue(recipe)))}</span>
           <span class="recipe-list-food-type" role="cell">${escapeHtml(recipe.foodType || "Unspecified")}</span>
           <strong class="recipe-list-calories" role="cell">${formatCalories(recipe.caloriesPerServing)}<span> / serving</span></strong>
           <div class="recipe-list-action" role="cell"><button class="recipe-view-button" data-view-recipe="${recipe.id}">View <span aria-hidden="true">›</span></button></div>
