@@ -1865,3 +1865,230 @@ body{background:var(--dashboard-cream)}
   .dashboard-hero{min-height:225px}
   .app-dialog{height:100dvh}
 }
+
+/* Version 1.2.1 compact mobile Home Dashboard */
+@media(max-width:800px) and (orientation:portrait){
+  #dashboard .dashboard-hero{
+    grid-template-columns:minmax(0,1fr) 112px;
+    min-height:138px;
+    height:138px;
+    margin-bottom:9px;
+    border-radius:16px;
+  }
+  #dashboard .dashboard-hero-copy{
+    padding:15px 0 10px 14px;
+  }
+  #dashboard .hero-brand{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  #dashboard .hero-leaf-mark{
+    width:32px;
+    height:32px;
+    flex:0 0 32px;
+    margin:0;
+    border-radius:8px;
+  }
+  #dashboard .hero-leaf-mark svg{width:23px;height:23px}
+  #dashboard .dashboard-hero h1{
+    font-size:1.34rem;
+    line-height:1;
+  }
+  #dashboard .dashboard-hero h1 small{
+    max-width:none;
+    margin-top:5px;
+    font-size:.53em;
+    line-height:1.15;
+    white-space:nowrap;
+  }
+  #dashboard .dashboard-hero-copy>p{display:none}
+  #dashboard .dashboard-date{display:none}
+  #dashboard .dashboard-hero-character{
+    right:2px;
+    bottom:-16px;
+    width:128px;
+    height:143px;
+  }
+  #dashboard .dashboard-hero-character img{
+    right:-7px;
+    width:145px;
+  }
+  #dashboard .hero-greeting{
+    right:8px;
+    bottom:7px;
+    width:113px;
+    padding:7px 8px;
+    border-radius:15px 15px 15px 7px;
+  }
+  #dashboard .hero-greeting strong{
+    font-size:.63rem;
+    line-height:1.18;
+  }
+  #dashboard .hero-greeting strong span{font-size:.72rem}
+
+  #dashboard .dashboard-summary-grid{
+    grid-template-columns:minmax(0,3fr) minmax(0,2fr);
+    gap:8px;
+    margin-bottom:9px;
+  }
+  #dashboard .dashboard-summary-card{
+    min-width:0;
+    min-height:132px;
+    height:132px;
+    padding:12px;
+    border-radius:14px;
+  }
+  #dashboard .summary-card-heading{gap:8px}
+  #dashboard .summary-icon{
+    width:36px;
+    height:36px;
+    flex:0 0 36px;
+    border-radius:9px;
+  }
+  #dashboard .summary-icon svg{width:20px;height:20px}
+  #dashboard .summary-card-heading .card-label{
+    font-size:.69rem;
+    line-height:1.15;
+  }
+  #dashboard .dashboard-summary-card>strong{
+    margin:7px 0 0;
+    font-size:1.42rem;
+    line-height:1.05;
+  }
+  #dashboard .dashboard-summary-card>small{
+    margin:5px 0 0;
+    font-size:.7rem;
+    line-height:1.25;
+  }
+  #dashboard .summary-progress-track{
+    height:6px;
+    margin:10px 0 0;
+  }
+  #dashboard .weight-remaining{
+    margin:3px 0 0;
+    font-size:.7rem;
+    line-height:1.2;
+  }
+  #dashboard .dashboard-text-action{
+    min-height:44px;
+    margin:0;
+    padding:7px 0 0;
+    font-size:.73rem;
+    line-height:1.15;
+    text-align:left;
+  }
+  #dashboard .weight-dashboard-card{padding:10px}
+  #dashboard .weight-dashboard-card .summary-icon{
+    width:30px;
+    height:30px;
+    flex-basis:30px;
+  }
+  #dashboard .weight-dashboard-card .summary-icon svg{width:18px;height:18px}
+  #dashboard .weight-dashboard-card>strong{
+    margin-top:4px;
+    font-size:1.32rem;
+  }
+  #dashboard .weight-dashboard-card>small{display:none}
+  #dashboard .weight-dashboard-card .weight-remaining{margin-top:2px}
+  #dashboard .weight-dashboard-card .dashboard-text-action{
+    width:100%;
+    padding-top:5px;
+    white-space:normal;
+  }
+
+  #dashboard .dashboard-section{
+    margin-bottom:9px;
+    padding:12px;
+  }
+  #dashboard .dashboard-section-heading{
+    margin-bottom:8px;
+  }
+  #dashboard .dashboard-kicker{font-size:.62rem}
+  #dashboard .dashboard-section-heading h2{font-size:1.05rem}
+  #dashboard .dashboard-section-heading p{font-size:.76rem}
+  #dashboard .quick-action-grid{gap:7px}
+  #dashboard .dashboard-action-tile{
+    min-height:88px;
+    height:88px;
+    padding:9px;
+    gap:3px;
+    border-radius:12px;
+  }
+  #dashboard .action-tile-icon{width:34px;height:34px}
+  #dashboard .action-tile-icon svg{width:31px;height:31px}
+  #dashboard .dashboard-action-tile strong{font-size:.82rem}
+  #dashboard .dashboard-action-tile small{
+    margin-top:1px;
+    font-size:.65rem;
+    line-height:1.2;
+  }
+  #dashboard .dashboard-action-tile .action-arrow{
+    right:7px;
+    bottom:5px;
+    font-size:.95rem;
+  }
+  #dashboard .jatiababa-action{
+    min-height:88px;
+    padding:8px 6px 7px 61px;
+  }
+  #dashboard .jatiababa-action img{
+    left:-8px;
+    bottom:-18px;
+    width:92px;
+  }
+
+  #dashboard .today-meals-section{padding:12px}
+  #dashboard .today-meals-section .dashboard-section-heading{
+    align-items:center;
+    flex-direction:row;
+  }
+  #dashboard .today-meals-section .dashboard-section-heading button{
+    width:auto;
+    min-height:44px;
+    padding:8px 11px;
+    font-size:.78rem;
+  }
+  #dashboard .dashboard-meal-slot{
+    grid-template-columns:36px minmax(0,1fr) auto;
+    min-height:66px;
+    margin-bottom:6px;
+    padding:7px 8px;
+  }
+  #dashboard .meal-slot-icon{width:36px;height:36px}
+  #dashboard .meal-slot-icon svg{width:19px;height:19px}
+  #dashboard .meal-slot-copy h3{font-size:.88rem}
+  #dashboard .meal-slot-copy p{font-size:.72rem}
+  #dashboard .meal-slot-status{padding:5px 7px;font-size:.66rem}
+  #dashboard .meal-slot-actions{gap:6px}
+  #dashboard .dashboard-row-action{
+    min-width:52px;
+    min-height:44px;
+    padding:7px 9px;
+    font-size:.72rem;
+  }
+}
+
+@media(max-width:390px) and (orientation:portrait){
+  #dashboard .dashboard-hero{
+    grid-template-columns:minmax(0,1fr) 103px;
+    min-height:132px;
+    height:132px;
+  }
+  #dashboard .dashboard-hero-copy{padding-left:11px}
+  #dashboard .dashboard-hero h1{font-size:1.22rem}
+  #dashboard .dashboard-hero-character{right:-5px}
+  #dashboard .hero-greeting{right:5px;width:107px}
+  #dashboard .dashboard-summary-grid{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:6px}
+  #dashboard .dashboard-summary-card{padding:10px}
+  #dashboard .summary-card-heading .card-label{font-size:.64rem}
+  #dashboard .dashboard-summary-card>strong{font-size:1.28rem}
+  #dashboard .dashboard-summary-card>small,#dashboard .weight-remaining{font-size:.64rem}
+  #dashboard .dashboard-text-action{font-size:.68rem}
+  #dashboard .dashboard-action-tile{padding:8px}
+  #dashboard .dashboard-action-tile strong{font-size:.78rem}
+  #dashboard .dashboard-action-tile small{font-size:.61rem}
+  #dashboard .jatiababa-action{padding-left:56px}
+  #dashboard .jatiababa-action img{width:86px}
+  #dashboard .today-meals-section .dashboard-section-heading button{font-size:.72rem}
+}
