@@ -1,7 +1,7 @@
 /*
 Soumya Healthy Diet Planner
 Release 1.0 Final RC
-Project Codename: Project Jatibaba
+Project Codename: Project JatiaBaba
 */
 
 const SCHEMA_VERSION = 1;
@@ -260,7 +260,7 @@ $("current-date").textContent = today.toLocaleDateString("en-US", {
   weekday: "long", year: "numeric", month: "long", day: "numeric"
 });
 const hour = today.getHours();
-$("greeting").textContent = `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, Soumya`;
+$("greeting").textContent = `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, Soumya!`;
 $("meal-date").value = todayForInput;
 $("history-date").value = todayForInput;
 $("weight-date").value = todayForInput;
@@ -279,12 +279,7 @@ function openPage(pageName) {
 }
 
 $all(".nav-button").forEach(button => button.addEventListener("click", () => openPage(button.dataset.page)));
-$("today-button").addEventListener("click", () => {
-  $("meal-date").value = todayForInput;
-  $("history-date").value = todayForInput;
-  openPage("dashboard");
-  updateDashboard();
-});
+$all("[data-dashboard-page]").forEach(button => button.addEventListener("click", () => openPage(button.dataset.dashboardPage)));
 
 // Dialog controls
 function openDialog(id, entryType) {
@@ -363,7 +358,7 @@ function addItemToCurrentMeal(item) {
 function renderCurrentMeal() {
   const container = $("current-meal-items");
   if (!currentMealItems.length) {
-    container.innerHTML = '<div class="empty-state"><span>➕</span><h4>No items added</h4><p>Add a recipe, manual food or Jatibaba estimate.</p></div>';
+    container.innerHTML = '<div class="empty-state"><span>➕</span><h4>No items added</h4><p>Add a recipe, manual food or JatiaBaba estimate.</p></div>';
   } else {
     container.innerHTML = currentMealItems.map(item => `
       <div class="meal-item-row">
@@ -408,8 +403,8 @@ $("add-custom-item-button").addEventListener("click", () => {
 $("add-jatibaba-item-button").addEventListener("click", () => {
   const calories = Number($("jatibaba-calories").value);
   const description = $("jatibaba-description").value.trim() || "Complete meal estimate";
-  if (!(calories > 0)) return showMessage("Please enter Jatibaba's estimated calories.");
-  addItemToCurrentMeal({ id: createUniqueId("mealitem"), source: "Estimated", name: "Jatibaba Estimate", details: description, calories: Math.round(calories) });
+  if (!(calories > 0)) return showMessage("Please enter JatiaBaba's estimated calories.");
+  addItemToCurrentMeal({ id: createUniqueId("mealitem"), source: "Estimated", name: "JatiaBaba Estimate", details: description, calories: Math.round(calories) });
   clearJatibabaEntry();
 });
 
@@ -563,6 +558,12 @@ function updateDashboard() {
   $("dashboard-remaining").textContent = formatCalories(remaining);
   $("dashboard-weight").textContent = `${applicationSettings.currentWeight} ${applicationSettings.weightUnit}`;
   $("dashboard-goal-weight").textContent = `Goal: ${applicationSettings.goalWeight} ${applicationSettings.weightUnit}`;
+  const weightDifference = Number(applicationSettings.currentWeight) - Number(applicationSettings.goalWeight);
+  $("dashboard-weight-remaining").textContent = weightDifference > 0
+    ? `${weightDifference.toLocaleString("en-US", { maximumFractionDigits: 1 })} ${applicationSettings.weightUnit} remaining`
+    : weightDifference < 0
+      ? `${Math.abs(weightDifference).toLocaleString("en-US", { maximumFractionDigits: 1 })} ${applicationSettings.weightUnit} below goal`
+      : "Goal reached";
   $("dashboard-progress-text").textContent = `${formatCalories(consumed)} / ${formatCalories(target)}`;
   $("dashboard-progress-target").textContent = `${formatCalories(target)} target`;
   $("calorie-progress").style.width = `${percentage}%`;
@@ -572,23 +573,50 @@ function updateDashboard() {
 function renderDashboardMeals() {
   const meals = getMealsForDate(todayForInput);
   const container = $("dashboard-meals-container");
-  const summary = $("dashboard-meal-type-summary");
-  if (!meals.length) {
-    summary.innerHTML = "";
-    container.innerHTML = '<div class="empty-state"><span>🍽️</span><h4>No meals recorded today</h4><p>Tap Add Meal to begin tracking.</p></div>';
-    return;
-  }
-  const byType = meals.reduce((groups, meal) => {
-    groups[meal.mealType] = (groups[meal.mealType] || 0) + Number(meal.totalCalories || 0);
-    return groups;
-  }, {});
-  summary.innerHTML = Object.entries(byType).map(([type, calories]) => `<span><strong>${escapeHtml(type)}</strong> ${formatCalories(calories)}</span>`).join("");
-  container.innerHTML = meals.map(meal => `
-    <div class="dashboard-meal-card">
-      <div class="dashboard-meal-heading"><div><h4>${escapeHtml(meal.mealType)}</h4><small>${formatDisplayDate(meal.date)}</small></div><strong>${formatCalories(meal.totalCalories)}</strong></div>
-      <ul class="dashboard-meal-items">${meal.items.length ? meal.items.map(item => `<li><span>${escapeHtml(item.name)}</span><strong>${formatCalories(item.calories)}</strong></li>`).join("") : '<li><span>Item details are not available for this older meal.</span></li>'}</ul>
-      <div class="meal-card-actions"><button class="secondary-button compact-button" data-edit-meal="${meal.id}">Edit</button><button class="delete-button compact-button" data-delete-meal="${meal.id}">Delete</button></div>
-    </div>`).join("");
+  const slots = [
+    { label: "Breakfast", addType: "Breakfast", icon: "sunrise", matches: ["Breakfast"] },
+    { label: "Lunch", addType: "Lunch", icon: "sun", matches: ["Lunch"] },
+    { label: "Snack", addType: "Evening Snack", icon: "apple", matches: ["Morning Snack", "Snack", "Evening Snack"] },
+    { label: "Dinner", addType: "Dinner", icon: "moon", matches: ["Dinner"] }
+  ];
+  const matchedIds = new Set();
+  const slotMarkup = slots.map(slot => {
+    const slotMeals = meals.filter(meal => slot.matches.includes(meal.mealType));
+    slotMeals.forEach(meal => matchedIds.add(meal.id));
+    const total = slotMeals.reduce((sum, meal) => sum + Number(meal.totalCalories || 0), 0);
+    const iconPaths = {
+      sunrise: '<path d="M5 18h14M7 14a5 5 0 0 1 10 0M12 3v3M4.5 7.5l2 2M19.5 7.5l-2 2"/>',
+      sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+      apple: '<path d="M12 8c-4-3-8 0-7 5 1 6 5 8 7 5 2 3 6 1 7-5 1-5-3-8-7-5Zm0 0c0-3 2-5 5-5M12 6c-2 0-3-1-4-2"/>',
+      moon: '<path d="M19 15.5A8 8 0 0 1 8.5 5 8 8 0 1 0 19 15.5Z"/>'
+    };
+    return `
+      <article class="dashboard-meal-slot ${slotMeals.length ? "is-logged" : ""}">
+        <span class="meal-slot-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${iconPaths[slot.icon]}</svg></span>
+        <div class="meal-slot-copy">
+          <h3>${slot.label}</h3>
+          <p>${slotMeals.length ? `${formatCalories(total)} · ${slotMeals.length === 1 ? "Logged" : `${slotMeals.length} entries logged`}` : "Not logged yet"}</p>
+        </div>
+        <span class="meal-slot-status">${slotMeals.length ? "Logged" : "Open"}</span>
+        <div class="meal-slot-actions">
+          ${slotMeals.map(meal => `<button class="dashboard-row-action" data-edit-meal="${meal.id}" aria-label="Edit ${escapeHtml(meal.mealType)}">Edit</button><button class="dashboard-row-action danger-row-action" data-delete-meal="${meal.id}" aria-label="Delete ${escapeHtml(meal.mealType)}">Delete</button>`).join("")}
+          ${slotMeals.length ? "" : `<button class="dashboard-row-action primary-row-action" data-add-meal-type="${slot.addType}">Add</button>`}
+        </div>
+      </article>`;
+  }).join("");
+  const unmatchedMeals = meals.filter(meal => !matchedIds.has(meal.id));
+  const unmatchedMarkup = unmatchedMeals.map(meal => `
+    <article class="dashboard-meal-slot is-logged">
+      <span class="meal-slot-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3v8M3 7h6M6 11v10M14 4v17M14 12c4 0 5-3 5-5V4c-3 0-5 3-5 8Z"/></svg></span>
+      <div class="meal-slot-copy"><h3>${escapeHtml(meal.mealType)}</h3><p>${formatCalories(meal.totalCalories)} · Logged</p></div>
+      <span class="meal-slot-status">Logged</span>
+      <div class="meal-slot-actions"><button class="dashboard-row-action" data-edit-meal="${meal.id}">Edit</button><button class="dashboard-row-action danger-row-action" data-delete-meal="${meal.id}">Delete</button></div>
+    </article>`).join("");
+  container.innerHTML = slotMarkup + unmatchedMarkup;
+  container.querySelectorAll("[data-add-meal-type]").forEach(button => button.addEventListener("click", () => {
+    openDialog("meal-dialog");
+    $("meal-type").value = button.dataset.addMealType;
+  }));
   bindMealActions(container);
 }
 
