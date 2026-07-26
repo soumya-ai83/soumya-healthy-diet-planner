@@ -259,6 +259,11 @@ document.addEventListener("change", event => {
 $("current-date").textContent = today.toLocaleDateString("en-US", {
   weekday: "long", year: "numeric", month: "long", day: "numeric"
 });
+$("current-date").dateTime = todayForInput;
+$("mobile-current-date").textContent = today.toLocaleDateString("en-US", {
+  weekday: "short", month: "short", day: "numeric"
+});
+$("mobile-current-date").dateTime = todayForInput;
 const hour = today.getHours();
 const greetingPeriod = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 $("greeting").innerHTML = `${greetingPeriod},<br><span>Soumya! 👋</span>`;
