@@ -4,7 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#176b52">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Healthy Diet">
+  <meta name="application-name" content="Healthy Diet">
+  <meta name="description" content="Track meals, recipes, weight, and calorie progress with JatiaBaba.">
   <title>Soumya Healthy Diet Planner</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -87,10 +95,23 @@
         <time class="mobile-dashboard-date" id="mobile-current-date">Loading…</time>
         <div class="hero-ai-decoration" aria-hidden="true">
           <span class="ai-mark">AI</span>
-          <svg viewBox="0 0 210 125" preserveAspectRatio="none">
-            <g class="ai-lines"><path d="M8 18 34 31 61 13M34 31l18 26 35-9 26 22 31-17 27 24M13 91l31-18 32 25 31-13 24 23 38-14M87 48l12-29m45 34 18-29M76 98l-4 20"/></g>
-            <g class="ai-nodes"><circle cx="8" cy="18" r="1.5"/><circle cx="34" cy="31" r="2.4"/><circle cx="61" cy="13" r="1.7"/><circle cx="52" cy="57" r="1.5"/><circle cx="87" cy="48" r="2.6"/><circle cx="99" cy="19" r="1.5"/><circle cx="113" cy="70" r="2"/><circle cx="144" cy="53" r="2.5"/><circle cx="162" cy="24" r="1.4"/><circle cx="171" cy="77" r="2.2"/><circle cx="13" cy="91" r="1.4"/><circle cx="44" cy="73" r="2.3"/><circle cx="76" cy="98" r="1.6"/><circle cx="107" cy="85" r="2"/><circle cx="131" cy="108" r="1.7"/><circle cx="169" cy="94" r="2.5"/><circle cx="198" cy="107" r="1.5"/></g>
-            <g class="ai-stars"><path d="M21 51v8m-4-4h8M119 27v9m-4.5-4.5h9M190 55v7m-3.5-3.5h7"/></g>
+          <svg viewBox="0 0 360 220" preserveAspectRatio="none">
+            <g class="ai-lines">
+              <path d="M166 112 142 63 192 34 238 64 278 96 307 53"/>
+              <path d="M166 112 91 147M166 112l54 37 66 19"/>
+            </g>
+            <g class="ai-nodes">
+              <circle cx="166" cy="112" r="3.1" class="ai-node-glow"/>
+              <circle cx="142" cy="63" r="2.1"/>
+              <circle cx="192" cy="34" r="2.8" class="ai-node-glow"/>
+              <circle cx="238" cy="64" r="2"/>
+              <circle cx="278" cy="96" r="2.7" class="ai-node-glow"/>
+              <circle cx="307" cy="53" r="1.7"/>
+              <circle cx="91" cy="147" r="2.2"/>
+              <circle cx="220" cy="149" r="1.9"/>
+              <circle cx="286" cy="168" r="2.3"/>
+            </g>
+            <g class="ai-stars"><path d="M116 99v8m-4-4h8M255 128v7m-3.5-3.5h7"/></g>
           </svg>
         </div>
         <div class="hero-lifestyle" aria-hidden="true">
@@ -173,8 +194,16 @@
     <section id="settings" class="app-page">
       <div class="page-heading"><div><h2>Settings</h2><p>Manage your calorie target and weight goals.</p></div></div>
       <article class="panel"><div class="form-grid"><div class="form-group"><label for="daily-calorie-target">Daily Calorie Target</label><input type="number" id="daily-calorie-target" min="500" step="50"></div><div class="form-group"><label for="current-weight">Current Weight</label><input type="number" id="current-weight" min="1" step="0.1"></div><div class="form-group"><label for="goal-weight">Goal Weight</label><input type="number" id="goal-weight" min="1" step="0.1"></div></div><div class="button-row"><button class="primary-button" id="save-settings-button">Save Settings</button></div></article>
+      <article class="panel install-app-panel" aria-labelledby="install-app-title">
+        <div class="panel-heading"><div><h3 id="install-app-title">Install App</h3><p>Open Healthy Diet from your Home Screen or desktop without changing your saved data.</p></div><span class="version-badge">PWA</span></div>
+        <p id="pwa-install-message" class="install-app-message" role="status" aria-live="polite">Checking installation availability…</p>
+        <div class="button-row">
+          <button class="primary-button" id="pwa-install-button" type="button" hidden>Install Healthy Diet</button>
+          <button class="secondary-button" id="pwa-install-dismiss-button" type="button" hidden>Dismiss instructions</button>
+        </div>
+      </article>
       <article class="panel data-management-panel">
-        <div class="panel-heading"><div><h3>Data Management</h3><p>Back up, restore, or reset the data stored on this device.</p></div><span class="version-badge">Version 1.0 Final RC</span></div>
+        <div class="panel-heading"><div><h3>Data Management</h3><p>Back up, restore, or reset the data stored on this device.</p></div><span class="version-badge">Version 1.3</span></div>
         <div class="data-management-grid">
           <section><h4>Export Backup</h4><p>Download meals, recipes, settings, and weight history as one JSON file.</p><button class="secondary-button" id="export-data-button">Export Data</button></section>
           <section><h4>Import Backup</h4><p>Review a compatible backup summary before replacing this device's app data.</p><label class="secondary-button file-button" for="import-data-input">Choose Backup</label><input class="visually-hidden" type="file" id="import-data-input" accept=".json,application/json"></section>

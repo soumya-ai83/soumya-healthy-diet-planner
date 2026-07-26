@@ -97,9 +97,17 @@ function getRecipeCategoryValue(recipe) {
     recipe.category,
     recipe.Category,
     recipe.recipeCategory,
-    recipe["Recipe Category"]
+    recipe["Recipe Category"],
+    recipe.foodCategory,
+    recipe.type
   ];
-  return candidates.find(value => String(value ?? "").trim()) ?? "";
+  for (const candidate of candidates) {
+    const value = candidate && typeof candidate === "object"
+      ? candidate.name ?? candidate.label ?? candidate.value
+      : candidate;
+    if (String(value ?? "").trim()) return value;
+  }
+  return "";
 }
 
 function normalizeCategoryLabel(value) {
@@ -951,13 +959,14 @@ let recipeHandbookPage = 1;
   });
 });
 
-function populateRecipeFilters() {
+function populateRecipeFilters(recipes = savedRecipes) {
   const foodTypeSelect = $("recipe-food-type-filter");
   const categorySelect = $("recipe-category-filter");
   const selectedFoodType = foodTypeSelect.value;
   const selectedCategoryKey = normalizeCategoryKey(categorySelect.value);
-  const foodTypes = [...new Set(savedRecipes.map(recipe => recipe.foodType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const categories = collectRecipeCategories(savedRecipes);
+  const completeRecipeCollection = Array.isArray(recipes) ? recipes : [];
+  const foodTypes = [...new Set(completeRecipeCollection.map(recipe => recipe.foodType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const categories = collectRecipeCategories(completeRecipeCollection);
   foodTypeSelect.innerHTML = '<option value="">All food types</option>' + foodTypes.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("");
   categorySelect.innerHTML = '<option value="">All categories</option>' + categories
     .map(({ key, label }) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`)
@@ -972,6 +981,7 @@ function populateRecipeFilters() {
 }
 
 function renderRecipeHandbook() {
+  populateRecipeFilters(savedRecipes);
   $("recipe-saved-count").textContent = `${savedRecipes.length} recipe${savedRecipes.length === 1 ? "" : "s"} saved`;
   const query = normalize($("recipe-search").value);
   const foodType = normalize($("recipe-food-type-filter").value);
@@ -1386,3 +1396,90 @@ renderMealHistory();
 populateRecipeFilters();
 renderRecipeHandbook();
 renderWeeklyProgress();
+
+// Version 1.3 PWA support
+const INSTALL_PROMPT_DISMISSED_KEY = "soumyaHealthyDietInstallPromptDismissed";
+let deferredInstallPrompt = null;
+
+function isStandaloneMode() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function isIosDevice() {
+  return /iphone|ipad|ipod/i.test(window.navigator.userAgent)
+    || (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+}
+
+function updateInstallAppUI() {
+  const message = $("pwa-install-message");
+  const installButton = $("pwa-install-button");
+  const dismissButton = $("pwa-install-dismiss-button");
+  if (!message || !installButton || !dismissButton) return;
+
+  installButton.hidden = true;
+  dismissButton.hidden = true;
+
+  if (isStandaloneMode()) {
+    message.textContent = "Healthy Diet is installed and running in standalone mode.";
+    return;
+  }
+
+  if (deferredInstallPrompt) {
+    message.textContent = "Install Healthy Diet for quick access from this device.";
+    installButton.hidden = false;
+    return;
+  }
+
+  if (isIosDevice()) {
+    if (localStorage.getItem(INSTALL_PROMPT_DISMISSED_KEY) === "true") {
+      message.textContent = "To install later, open this page in Safari, tap Share, then Add to Home Screen.";
+      return;
+    }
+    message.textContent = "Install on iPhone: open in Safari, tap Share, then Add to Home Screen.";
+    dismissButton.hidden = false;
+    return;
+  }
+
+  message.textContent = "Use your browser's Install app menu when installation is available.";
+}
+
+$("pwa-install-button")?.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) return;
+  const promptEvent = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  await promptEvent.prompt();
+  const result = await promptEvent.userChoice;
+  showMessage(result.outcome === "accepted" ? "Healthy Diet installation started." : "Installation was dismissed.");
+  updateInstallAppUI();
+});
+
+$("pwa-install-dismiss-button")?.addEventListener("click", () => {
+  localStorage.setItem(INSTALL_PROMPT_DISMISSED_KEY, "true");
+  updateInstallAppUI();
+});
+
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  updateInstallAppUI();
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  localStorage.removeItem(INSTALL_PROMPT_DISMISSED_KEY);
+  updateInstallAppUI();
+  showMessage("Healthy Diet was installed successfully.");
+});
+
+updateInstallAppUI();
+
+if ("serviceWorker" in navigator) {
+  const isLocalDevelopment = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+  if (window.isSecureContext || isLocalDevelopment) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./service-worker.js", { scope: "./" })
+        .then(registration => registration.update())
+        .catch(error => console.warn("[PWA] Service worker registration failed.", error));
+    });
+  }
+}
