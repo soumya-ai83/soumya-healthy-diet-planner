@@ -1919,18 +1919,27 @@ body{background:var(--dashboard-cream)}
   }
   #dashboard .hero-ai-decoration{
     z-index:2;
-    top:0;
-    right:-5px;
+    top:-2px;
+    right:-8px;
     display:block;
-    width:155px;
-    height:92px;
-    opacity:.32;
+    width:140px;
+    height:104px;
+    opacity:.3;
     pointer-events:none;
+    -webkit-mask-image:radial-gradient(ellipse at 72% 52%,#000 18%,rgba(0,0,0,.78) 52%,transparent 84%);
+    mask-image:radial-gradient(ellipse at 72% 52%,#000 18%,rgba(0,0,0,.78) 52%,transparent 84%);
   }
   #dashboard .hero-ai-decoration .ai-mark{display:none}
   #dashboard .hero-ai-decoration .ai-lines{stroke:rgba(255,255,255,.58)}
   #dashboard .hero-ai-decoration .ai-nodes{fill:rgba(255,255,255,.82)}
   #dashboard .hero-ai-decoration .ai-stars{stroke:rgba(255,255,255,.76)}
+  #dashboard .hero-ai-decoration .ai-nodes circle:nth-child(even){display:none}
+  #dashboard .hero-ai-decoration .ai-nodes circle:nth-child(5),
+  #dashboard .hero-ai-decoration .ai-nodes circle:nth-child(9),
+  #dashboard .hero-ai-decoration .ai-nodes circle:nth-child(15){
+    fill:#fff;
+    filter:drop-shadow(0 0 2px rgba(224,255,235,.9));
+  }
   #dashboard .dashboard-date{display:none}
   #dashboard .mobile-dashboard-date{
     position:absolute;
