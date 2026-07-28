@@ -4,7 +4,7 @@ Release 1.0 Final RC
 Project Codename: Project JatiaBaba
 */
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = window.SHDPStorage?.TARGET_SCHEMA_VERSION || 2;
 const STORAGE = {
   meals: "soumyaHealthyDietMeals",
   recipes: "soumyaHealthyDietRecipes",
@@ -27,6 +27,8 @@ let savedRecipes = starterRecipeMerge.recipes;
 if (starterRecipeMerge.changed || !localStorage.getItem(STORAGE.recipes)) localStorage.setItem(STORAGE.recipes, JSON.stringify(savedRecipes));
 let weightHistory = normalizeWeightCollection(loadJson(STORAGE.weightHistory, []));
 let applicationMetadata = normalizeMetadata(loadJson(STORAGE.metadata, {}));
+const ingredientStore = window.SHDPIngredients?.initialize(localStorage, ingredientDatabase);
+const activeIngredientDatabase = ingredientStore?.ingredients || ingredientDatabase;
 let currentMealItems = [];
 let ingredientRowCounter = 0;
 let toastTimer;
@@ -264,6 +266,23 @@ function showMessage(message) {
   toast.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2800);
+}
+
+function reportMigrationStatus() {
+  const migration = window.SHDPMigrationResult;
+  if (!migration) return;
+  if (migration.status === "failed") {
+    console.error("[V1.4A Migration] Migration stopped safely.", migration.error);
+    showMessage("Upgrade safety check failed. Version 1.3 data was preserved; synchronization is disabled.");
+  } else if (migration.status === "completed" && migration.migrated) {
+    showMessage("Version 1.3 data backup and migration safety checks passed.");
+  }
+}
+
+function reportIngredientStoreStatus() {
+  if (ingredientStore?.status !== "failed") return;
+  console.error("[V1.4A Ingredients] Persistent Ingredient Master Database is unavailable.", ingredientStore.error);
+  showMessage("Ingredient database safety check failed. Stored ingredient data was preserved.");
 }
 
 function clearFieldError(field) {
@@ -722,7 +741,7 @@ function normalize(value) {
 }
 function findIngredient(name) {
   const query = normalize(name);
-  return ingredientDatabase.find(item => normalize(item.name) === query || (item.aliases || []).some(alias => normalize(alias) === query));
+  return activeIngredientDatabase.find(item => normalize(item.name) === query || (item.aliases || []).some(alias => normalize(alias) === query));
 }
 
 function populateIngredientOptions() {
@@ -732,7 +751,7 @@ function populateIngredientOptions() {
 function updateIngredientOptions(searchText) {
   const query = normalize(searchText);
   const uniqueNames = new Map();
-  ingredientDatabase.forEach(item => {
+  activeIngredientDatabase.forEach(item => {
     const searchableNames = [item.name, ...(item.aliases || [])];
     if (query && !searchableNames.some(name => normalize(name).includes(query))) return;
     const canonicalName = String(item.name || "").trim().replace(/\s+/g, " ");
@@ -913,12 +932,21 @@ $("save-new-recipe-button").addEventListener("click", () => {
   if (savedRecipes.some(recipe => recipe.id !== editingRecipeId && normalize(recipe.name) === normalize(name))) return showMessage("A recipe with this name already exists.");
   isSavingRecipe = true;
   try {
-    const ingredients = $all(".ingredient-entry-row").map(row => ({
+    const recipeIngredientRows = $all(".ingredient-entry-row").map(row => ({
       name: row.querySelector(".ingredient-name-input").value.trim(),
       quantity: Number(row.querySelector(".ingredient-quantity-input").value),
       unit: row.querySelector(".ingredient-unit-input").value,
-      calories: Number(row.querySelector(".ingredient-total-input").value)
+      calories: Number(row.querySelector(".ingredient-total-input").value),
+      manualCalories: Number(row.querySelector(".manual-calories").value),
+      manualAmount: Number(row.querySelector(".manual-amount").value),
+      manualUnit: row.querySelector(".manual-unit").value
     })).filter(item => item.name && item.quantity > 0);
+    const ingredients = recipeIngredientRows.map(({ name: ingredientName, quantity, unit, calories }) => ({
+      name: ingredientName,
+      quantity,
+      unit,
+      calories
+    }));
     const recipeData = {
       name, foodType, category: category || "Uncategorized", ingredients,
       totalServings: nutrition.servings,
@@ -937,12 +965,29 @@ $("save-new-recipe-button").addEventListener("click", () => {
     }
     const successMessage = editedRecipe ? `${name} updated successfully.` : `${name} added to the Recipe Master Database.`;
     saveAll();
+    const ingredientExpansion = ingredientStore?.status === "ready"
+      ? window.SHDPIngredients.registerRecipeIngredients(
+        localStorage,
+        recipeIngredientRows,
+        activeIngredientDatabase
+      )
+      : {
+        status: "failed",
+        created: [],
+        error: "Stored ingredient data was preserved because its safety check did not pass."
+      };
     loadRecipeOptions();
     populateRecipeFilters();
+    populateIngredientOptions();
     renderRecipeHandbook();
     prepareNewRecipe();
     closeDialog("recipe-dialog");
-    showMessage(successMessage);
+    const expansionMessage = ingredientExpansion.status === "failed"
+      ? ` Ingredient database update needs attention: ${ingredientExpansion.error}`
+      : ingredientExpansion.created.length
+        ? ` ${ingredientExpansion.created.length} new ingredient${ingredientExpansion.created.length === 1 ? "" : "s"} saved automatically.`
+        : "";
+    showMessage(`${successMessage}${expansionMessage}`);
   } finally {
     isSavingRecipe = false;
   }
@@ -1396,6 +1441,8 @@ renderMealHistory();
 populateRecipeFilters();
 renderRecipeHandbook();
 renderWeeklyProgress();
+reportMigrationStatus();
+reportIngredientStoreStatus();
 
 // Version 1.3 PWA support
 const INSTALL_PROMPT_DISMISSED_KEY = "soumyaHealthyDietInstallPromptDismissed";

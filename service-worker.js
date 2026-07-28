@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.3.0"; // Bump this value whenever app-shell assets change.
+const CACHE_VERSION = "v1.4a-phase2"; // Bump this value whenever app-shell assets change.
 const CACHE_PREFIX = "soumya-healthy-diet-";
 const SHELL_CACHE = `${CACHE_PREFIX}${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}${CACHE_VERSION}-runtime`;
@@ -8,7 +8,9 @@ const APP_SHELL = [
   "./",
   "./index.html",
   "./css/style.css",
+  "./js/storage.js",
   "./js/data.js",
+  "./js/ingredients.js",
   "./js/script.js",
   "./manifest.webmanifest",
   "./assets/jatiababa/jatiababa-ask.png",

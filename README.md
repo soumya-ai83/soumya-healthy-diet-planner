@@ -38,3 +38,14 @@ Use the browser's **Install app** action, or open **Settings → Install App** i
 Meals, recipes, settings, and weight history remain in the current browser or installed app's local storage. Version 1.3 does not add accounts, cloud backup, or cross-device synchronization.
 
 Export a backup from **Settings → Data Management** before clearing browser storage, removing site data, or changing devices. Clearing cached application files is different from clearing browser storage; clearing site storage can remove personal app data.
+
+## Version 1.4A development documentation
+
+The Version 1.4A Phase 1 migration architecture, backup behavior, validation,
+rollback limitations, offline assumptions, and approval-gate requirements are
+documented in [`docs/phase-1-migration-safety.md`](docs/phase-1-migration-safety.md).
+
+The Phase 2 persistent Ingredient Master Database, automatic recipe-driven
+expansion, duplicate prevention, offline behavior, and Phase 3 handoff are
+documented in
+[`docs/phase-2-ingredient-database.md`](docs/phase-2-ingredient-database.md).
