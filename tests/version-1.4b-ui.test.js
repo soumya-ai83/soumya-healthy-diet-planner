@@ -30,8 +30,41 @@ test("keeps the mobile Add Ingredient FAB on the Ingredient Database screen", ()
   const ingredientSection = html.match(/<section id="ingredient-database"[\s\S]*?<\/section>/)?.[0] || "";
   assert.match(ingredientSection, /class="ingredient-fab"/);
   assert.match(css, /\.ingredient-fab\s*\{/);
+  assert.match(css, /@media\(max-width:800px\)[\s\S]*?#ingredient-database\.active-page \.ingredient-fab\s*\{/);
   assert.match(css, /bottom:calc\(82px \+ env\(safe-area-inset-bottom\)\)/);
   assert.match(css, /#ingredient-database\{padding-bottom:96px\}/);
+  assert.match(css, /body:has\(\.app-dialog\[open\]\) \.ingredient-fab\{display:none\}/);
+});
+
+test("makes the Ingredient Database reachable through the mobile More screen", () => {
+  const settingsSection = html.match(/<section id="settings"[\s\S]*?<\/section>/)?.[0] || "";
+  assert.match(settingsSection, /class="panel mobile-more-navigation"/);
+  assert.match(settingsSection, /data-dashboard-page="ingredient-database"/);
+  assert.match(css, /\.mobile-more-navigation\{display:none\}/);
+  assert.match(css, /@media\(max-width:800px\)[\s\S]*?\.mobile-more-navigation\s*\{[\s\S]*?display:flex/);
+  assert.match(script, /const mobileNavigationPage = pageName === "ingredient-database" \? "settings" : pageName;/);
+  assert.match(script, /button\.dataset\.mobilePage === mobileNavigationPage/);
+});
+
+test("shows one Delete Ingredient label in every mobile recipe ingredient row", () => {
+  assert.match(script, /class="remove-ingredient-button"[^>]*>Delete Ingredient<\/button>/);
+  assert.doesNotMatch(css, /content:"[^"]*Delete Ingredient[^"]*"/);
+  assert.match(css, /\.remove-ingredient-button::before\{content:"🗑"/);
+});
+
+test("keeps a mobile Add Ingredient FAB inside the shared Create/Edit Recipe modal", () => {
+  const recipeDialog = html.match(/<dialog id="recipe-dialog"[\s\S]*?<\/dialog>/)?.[0] || "";
+  assert.match(recipeDialog, /id="add-ingredient-button" data-add-recipe-ingredient/);
+  assert.match(recipeDialog, /class="recipe-ingredient-fab"[^>]*data-add-recipe-ingredient/);
+  assert.match(recipeDialog, /class="recipe-dialog-actions"[\s\S]*?recipe-ingredient-fab[\s\S]*?recipe-save-actions/);
+  assert.equal((recipeDialog.match(/class="recipe-ingredient-fab"/g) || []).length, 1);
+  assert.equal((html.match(/class="recipe-ingredient-fab"/g) || []).length, 1);
+  assert.match(script, /\$all\("\[data-add-recipe-ingredient\]"\)[\s\S]*?createIngredientRow\(\)/);
+  assert.match(script, /function editRecipe\(recipeId\)[\s\S]*?openDialog\("recipe-dialog", "edit"\)/);
+  assert.match(css, /\.recipe-ingredient-fab\{display:none\}/);
+  assert.match(css, /@media\(max-width:800px\)[\s\S]*?\.recipe-ingredient-fab\s*\{[\s\S]*?display:flex/);
+  assert.match(css, /\.recipe-dialog-actions\s*\{[\s\S]*?border-top:[^;]+;[\s\S]*?background:[^;]+;/);
+  assert.match(css, /\.recipe-dialog-actions \.recipe-save-actions\s*\{[\s\S]*?grid-template-columns:1fr 1fr/);
 });
 
 test("wires category refresh after recipe and ingredient changes", () => {
@@ -43,7 +76,7 @@ test("wires category refresh after recipe and ingredient changes", () => {
 });
 
 test("advances the offline app shell for Version 1.4B", () => {
-  assert.match(serviceWorker, /v1\.4b-ingredient-management/);
+  assert.match(serviceWorker, /v1\.4b-recipe-ingredient-fab/);
   ["./js/storage.js", "./js/data.js", "./js/ingredients.js", "./js/script.js"].forEach(asset =>
     assert.ok(serviceWorker.includes(asset), `Missing ${asset} from app shell`)
   );

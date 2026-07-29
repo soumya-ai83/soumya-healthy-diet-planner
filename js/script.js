@@ -348,8 +348,9 @@ function openPage(pageName) {
     progress: "Progress",
     settings: "More"
   };
+  const mobileNavigationPage = pageName === "ingredient-database" ? "settings" : pageName;
   $all(".mobile-nav-button").forEach(button => {
-    const isActive = button.dataset.mobilePage === pageName;
+    const isActive = button.dataset.mobilePage === mobileNavigationPage;
     button.classList.toggle("active", isActive);
     if (isActive) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
@@ -858,7 +859,9 @@ function calculateRecipeNutrition() {
   return { total, servings, perServing: servings > 0 ? total / servings : 0 };
 }
 
-$("add-ingredient-button").addEventListener("click", () => createIngredientRow());
+$all("[data-add-recipe-ingredient]").forEach(button =>
+  button.addEventListener("click", () => createIngredientRow())
+);
 $("total-servings").addEventListener("input", calculateRecipeNutrition);
 
 function resetNewRecipeForm() {

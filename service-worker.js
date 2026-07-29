@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.4b-ingredient-management"; // Bump this value whenever app-shell assets change.
+const CACHE_VERSION = "v1.4b-recipe-ingredient-fab"; // Bump this value whenever app-shell assets change.
 const CACHE_PREFIX = "soumya-healthy-diet-";
 const SHELL_CACHE = `${CACHE_PREFIX}${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}${CACHE_VERSION}-runtime`;
