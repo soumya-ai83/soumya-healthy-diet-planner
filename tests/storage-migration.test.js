@@ -47,6 +47,12 @@ function version13Fixture() {
   };
 }
 
+function snapshotVersion13Source(storage) {
+  return Object.fromEntries(
+    Object.keys(version13Fixture()).map(key => [key, storage.getItem(key)])
+  );
+}
+
 test("migrates Version 1.3 by exact copy and retains an immutable backup", () => {
   const original = version13Fixture();
   const storage = new MemoryStorage(original);
@@ -71,7 +77,7 @@ test("migrates Version 1.3 by exact copy and retains an immutable backup", () =>
   assert.equal(candidate.counts.recipes, 1);
   assert.equal(candidate.counts.weightHistory, 1);
   const marker = JSON.parse(storage.getItem(storageApi.MIGRATION_STORAGE.versionMarker));
-  assert.equal(marker.release, "1.4A");
+  assert.equal(marker.release, "1.4B");
   assert.equal(marker.schemaVersion, 2);
   assert.equal(marker.migrationState, "local-validated");
 });
@@ -129,7 +135,7 @@ test("does nothing destructive on a fresh installation", () => {
   assert.equal(storage.getItem(storageApi.MIGRATION_STORAGE.backup), null);
   assert.equal(storage.getItem(storageApi.MIGRATION_STORAGE.candidate), null);
   const marker = JSON.parse(storage.getItem(storageApi.MIGRATION_STORAGE.versionMarker));
-  assert.equal(marker.release, "1.4A");
+  assert.equal(marker.release, "1.4B");
   assert.equal(marker.schemaVersion, 2);
 });
 
@@ -141,12 +147,44 @@ test("detects the explicit Version 1.4A marker before inspecting legacy keys", (
     syncVerificationStatus: "not-required",
     migrationComplete: true
   });
+  marker.release = "1.4A";
   storage.setItem(storageApi.MIGRATION_STORAGE.versionMarker, JSON.stringify(marker));
 
   const detected = storageApi.detectInstallation(storage, {});
   assert.equal(detected.type, "current");
   assert.equal(detected.schemaVersion, 2);
   assert.equal(detected.sourceRelease, "1.4A");
+});
+
+test("advances a verified Version 1.4A marker to Version 1.4B without remigrating data", () => {
+  const storage = new MemoryStorage(version13Fixture());
+  const first = storageApi.runMigration(storage, "2026-07-28T00:00:00.000Z");
+  const marker = JSON.parse(storage.getItem(storageApi.MIGRATION_STORAGE.versionMarker));
+  marker.release = "1.4A";
+  delete marker.previousRelease;
+  storage.setItem(storageApi.MIGRATION_STORAGE.versionMarker, JSON.stringify(marker));
+  const sourceBefore = snapshotVersion13Source(storage);
+
+  const upgraded = storageApi.runMigration(storage, "2026-07-29T00:00:00.000Z");
+  const upgradedMarker = JSON.parse(storage.getItem(storageApi.MIGRATION_STORAGE.versionMarker));
+  assert.equal(first.status, "completed");
+  assert.equal(upgraded.status, "completed");
+  assert.equal(upgraded.migrated, false);
+  assert.equal(upgraded.reusedVerifiedMigration, true);
+  assert.equal(upgradedMarker.release, "1.4B");
+  assert.equal(upgradedMarker.previousRelease, "1.4A");
+  assert.deepEqual(snapshotVersion13Source(storage), sourceBefore);
+});
+
+test("reopens a fresh current installation without creating a legacy backup", () => {
+  const storage = new MemoryStorage();
+  const first = storageApi.runMigration(storage, "2026-07-28T00:00:00.000Z");
+  const second = storageApi.runMigration(storage, "2026-07-29T00:00:00.000Z");
+  assert.equal(first.status, "not-needed");
+  assert.equal(second.status, "not-needed");
+  assert.equal(second.reusedCurrentInstallation, true);
+  assert.equal(storage.getItem(storageApi.MIGRATION_STORAGE.backup), null);
+  assert.equal(storage.getItem(storageApi.MIGRATION_STORAGE.candidate), null);
 });
 
 test("rejects unsupported future schema versions without modifying data", () => {

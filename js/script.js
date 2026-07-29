@@ -33,11 +33,13 @@ let currentMealItems = [];
 let ingredientRowCounter = 0;
 let toastTimer;
 let editingRecipeId = null;
+let editingIngredientId = null;
 let selectedRecipeDetailsId = null;
 let editingMealId = null;
 let editingMealItemId = null;
 let isSavingMeal = false;
 let isSavingRecipe = false;
+let isSavingIngredient = false;
 let isSavingWeight = false;
 let isImportingData = false;
 
@@ -342,6 +344,7 @@ function openPage(pageName) {
     dashboard: "Home",
     "meal-history": "Meals",
     "recipe-handbook": "Recipes",
+    "ingredient-database": "Ingredients",
     progress: "Progress",
     settings: "More"
   };
@@ -356,6 +359,7 @@ function openPage(pageName) {
   if (page) page.classList.add("active-page");
   if (pageName === "meal-history") renderMealHistory();
   if (pageName === "recipe-handbook") renderRecipeHandbook();
+  if (pageName === "ingredient-database") renderIngredientDatabase();
   if (pageName === "progress") renderWeeklyProgress();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -378,6 +382,7 @@ function openDialog(id, entryType) {
     if (entryType !== "edit") prepareNewRecipe();
     if ($("ingredients-container").children.length === 0) createIngredientRow();
   }
+  if (id === "ingredient-dialog" && entryType !== "edit") prepareIngredientDialog();
   if (id === "weight-dialog") {
     $("weight-date").value = todayForInput;
     const todayRecord = weightHistory.find(record => record.date === todayForInput);
@@ -394,6 +399,13 @@ function closeDialog(id) {
 }
 
 $all("[data-open-dialog]").forEach(button => button.addEventListener("click", () => openDialog(button.dataset.openDialog, button.dataset.entry)));
+$all("[data-open-ingredient-dialog]").forEach(button => button.addEventListener("click", () => {
+  if (ingredientStore?.status !== "ready") {
+    showMessage("Ingredient management is unavailable because its storage safety check did not pass.");
+    return;
+  }
+  openDialog("ingredient-dialog");
+}));
 $all("[data-close-dialog]").forEach(button => button.addEventListener("click", () => closeDialog(button.dataset.closeDialog)));
 $all(".app-dialog").forEach(dialog => dialog.addEventListener("click", event => {
   if (event.target === dialog) dialog.close();
@@ -939,7 +951,8 @@ $("save-new-recipe-button").addEventListener("click", () => {
       calories: Number(row.querySelector(".ingredient-total-input").value),
       manualCalories: Number(row.querySelector(".manual-calories").value),
       manualAmount: Number(row.querySelector(".manual-amount").value),
-      manualUnit: row.querySelector(".manual-unit").value
+      manualUnit: row.querySelector(".manual-unit").value,
+      category: category || "Uncategorized"
     })).filter(item => item.name && item.quantity > 0);
     const ingredients = recipeIngredientRows.map(({ name: ingredientName, quantity, unit, calories }) => ({
       name: ingredientName,
@@ -977,8 +990,7 @@ $("save-new-recipe-button").addEventListener("click", () => {
         error: "Stored ingredient data was preserved because its safety check did not pass."
       };
     loadRecipeOptions();
-    populateRecipeFilters();
-    populateIngredientOptions();
+    refreshCategoryViews();
     renderRecipeHandbook();
     prepareNewRecipe();
     closeDialog("recipe-dialog");
@@ -1023,6 +1035,28 @@ function populateRecipeFilters(recipes = savedRecipes) {
     categorySelect.value = "";
     recipeHandbookPage = 1;
   }
+}
+
+function refreshCategoryViews() {
+  populateRecipeFilters(savedRecipes);
+  const recipeCategories = collectRecipeCategories(savedRecipes);
+  $("recipe-category-options").innerHTML = recipeCategories
+    .map(({ label }) => `<option value="${escapeHtml(label)}"></option>`)
+    .join("");
+
+  const ingredientCategories = window.SHDPIngredients.collectCategories(activeIngredientDatabase);
+  const categoryFilter = $("ingredient-category-filter");
+  const selectedCategory = window.SHDPIngredients.normalizedName(categoryFilter.value);
+  categoryFilter.innerHTML = '<option value="">All categories</option>' + ingredientCategories
+    .map(category => `<option value="${escapeHtml(window.SHDPIngredients.normalizedName(category))}">${escapeHtml(category)}</option>`)
+    .join("");
+  if (ingredientCategories.some(category => window.SHDPIngredients.normalizedName(category) === selectedCategory)) {
+    categoryFilter.value = selectedCategory;
+  }
+  $("ingredient-category-options").innerHTML = ingredientCategories
+    .map(category => `<option value="${escapeHtml(category)}"></option>`)
+    .join("");
+  populateIngredientOptions();
 }
 
 function renderRecipeHandbook() {
@@ -1115,7 +1149,7 @@ function deleteRecipe(recipeId) {
   saveAll();
   closeDialog("recipe-details-dialog");
   loadRecipeOptions();
-  populateRecipeFilters();
+  refreshCategoryViews();
   renderRecipeHandbook();
   showMessage(`${recipe.name} deleted. Historical meals were preserved.`);
 }
@@ -1149,6 +1183,160 @@ $("add-meal-from-details-button").addEventListener("click", () => {
 });
 $("delete-recipe-from-details-button").addEventListener("click", () => {
   if (selectedRecipeDetailsId) deleteRecipe(selectedRecipeDetailsId);
+});
+
+// Ingredient Database
+function getActiveIngredients() {
+  return activeIngredientDatabase.filter(ingredient => !ingredient.deletedAt);
+}
+
+function renderIngredientDatabase() {
+  const query = normalize($("ingredient-database-search").value);
+  const category = window.SHDPIngredients.normalizedName($("ingredient-category-filter").value);
+  const activeIngredients = getActiveIngredients();
+  const ingredients = activeIngredients
+    .filter(ingredient => {
+      const names = [ingredient.name, ...(ingredient.aliases || [])];
+      return (!query || names.some(name => normalize(name).includes(query)))
+        && (!category || window.SHDPIngredients.normalizedName(ingredient.category) === category);
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+  $("ingredient-saved-count").textContent = `${activeIngredients.length} ingredient${activeIngredients.length === 1 ? "" : "s"} saved`;
+  const container = $("ingredient-database-container");
+  if (!activeIngredients.length) {
+    container.innerHTML = '<div class="empty-state"><span>🌱</span><h4>No ingredients saved yet.</h4><p>Use Add Ingredient to create your first nutrition reference.</p></div>';
+    return;
+  }
+  if (!ingredients.length) {
+    container.innerHTML = '<div class="empty-state"><span>🔎</span><h4>No ingredients match these filters.</h4><button class="secondary-button" data-clear-ingredient-filters>Clear Filters</button></div>';
+    container.querySelector("[data-clear-ingredient-filters]").addEventListener("click", () => {
+      $("ingredient-database-search").value = "";
+      $("ingredient-category-filter").value = "";
+      renderIngredientDatabase();
+    });
+    return;
+  }
+
+  container.innerHTML = `
+    <p class="ingredient-result-count">Showing ${ingredients.length} of ${activeIngredients.length} ingredients</p>
+    <div class="ingredient-list" role="table" aria-label="Ingredient Master Database">
+      <div class="ingredient-list-header" role="row">
+        <span role="columnheader">Ingredient</span><span role="columnheader">Category</span><span role="columnheader">Nutrition Reference</span><span role="columnheader">Actions</span>
+      </div>
+      ${ingredients.map(ingredient => `
+        <div class="ingredient-list-row" role="row">
+          <div class="ingredient-list-name" role="cell"><strong>${escapeHtml(ingredient.name)}</strong><small>${ingredient.aliases?.length ? `Also: ${escapeHtml(ingredient.aliases.join(", "))}` : "No aliases"}</small></div>
+          <span class="ingredient-list-category" role="cell">${escapeHtml(ingredient.category || "Uncategorized")}</span>
+          <span class="ingredient-list-reference" role="cell">${formatCalories(ingredient.referenceCalories)} / ${Number(ingredient.referenceAmount).toLocaleString("en-US")} ${escapeHtml(ingredient.referenceUnit)}</span>
+          <div class="ingredient-list-actions" role="cell"><button class="secondary-button compact-button" data-edit-ingredient="${ingredient.id}">Edit</button><button class="delete-button compact-button" data-delete-ingredient="${ingredient.id}">Delete</button></div>
+        </div>`).join("")}
+    </div>`;
+
+  container.querySelectorAll("[data-edit-ingredient]").forEach(button =>
+    button.addEventListener("click", () => editIngredient(button.dataset.editIngredient))
+  );
+  container.querySelectorAll("[data-delete-ingredient]").forEach(button =>
+    button.addEventListener("click", () => removeIngredient(button.dataset.deleteIngredient))
+  );
+}
+
+function prepareIngredientDialog(ingredient = null) {
+  editingIngredientId = ingredient?.id || null;
+  $("ingredient-dialog-title").textContent = ingredient ? `Edit ${ingredient.name}` : "Add Ingredient";
+  $("ingredient-dialog-description").textContent = ingredient
+    ? "Update this reusable nutrition reference."
+    : "Save a reusable nutrition reference.";
+  $("save-ingredient-button").textContent = ingredient ? "Save Changes" : "Save Ingredient";
+  $("ingredient-name").value = ingredient?.name || "";
+  $("ingredient-category").value = ingredient?.category === "Uncategorized" ? "" : ingredient?.category || "";
+  $("ingredient-aliases").value = ingredient?.aliases?.join(", ") || "";
+  $("ingredient-reference-calories").value = ingredient?.referenceCalories ?? "";
+  $("ingredient-reference-amount").value = ingredient?.referenceAmount ?? "";
+  $("ingredient-reference-unit").value = ingredient?.referenceUnit || "g";
+  [
+    "ingredient-name",
+    "ingredient-category",
+    "ingredient-aliases",
+    "ingredient-reference-calories",
+    "ingredient-reference-amount",
+    "ingredient-reference-unit"
+  ].forEach(id => clearFieldError($(id)));
+}
+
+function editIngredient(ingredientId) {
+  if (ingredientStore?.status !== "ready") return showMessage("Ingredient management is unavailable because its storage safety check did not pass.");
+  const ingredient = activeIngredientDatabase.find(item => item.id === ingredientId && !item.deletedAt);
+  if (!ingredient) return showMessage("The selected ingredient could not be found.");
+  prepareIngredientDialog(ingredient);
+  openDialog("ingredient-dialog", "edit");
+}
+
+function removeIngredient(ingredientId) {
+  if (ingredientStore?.status !== "ready") return showMessage("Ingredient management is unavailable because its storage safety check did not pass.");
+  const ingredient = activeIngredientDatabase.find(item => item.id === ingredientId && !item.deletedAt);
+  if (!ingredient || !confirm(`Delete "${ingredient.name}" from the Ingredient Database? Existing recipes and meal history will not be changed.`)) return;
+  const result = window.SHDPIngredients.deleteIngredient(localStorage, activeIngredientDatabase, ingredientId);
+  if (result.status === "failed") return showMessage(`Ingredient could not be deleted: ${result.error}`);
+  refreshCategoryViews();
+  renderIngredientDatabase();
+  showMessage(`${ingredient.name} deleted. Existing recipes were preserved.`);
+}
+
+$("ingredient-database-search").addEventListener("input", renderIngredientDatabase);
+$("ingredient-category-filter").addEventListener("change", renderIngredientDatabase);
+
+$("save-ingredient-button").addEventListener("click", () => {
+  if (isSavingIngredient) return;
+  if (ingredientStore?.status !== "ready") return showMessage("Ingredient management is unavailable because its storage safety check did not pass.");
+  const input = {
+    name: $("ingredient-name").value.trim(),
+    category: $("ingredient-category").value.trim() || "Uncategorized",
+    aliases: $("ingredient-aliases").value.split(",").map(value => value.trim()).filter(Boolean),
+    referenceCalories: Number($("ingredient-reference-calories").value),
+    referenceAmount: Number($("ingredient-reference-amount").value),
+    referenceUnit: $("ingredient-reference-unit").value
+  };
+  const invalid = [];
+  clearFieldError($("ingredient-name"));
+  clearFieldError($("ingredient-reference-calories"));
+  clearFieldError($("ingredient-reference-amount"));
+  if (!input.name) {
+    setFieldError($("ingredient-name"), "Ingredient name is required.");
+    invalid.push($("ingredient-name"));
+  }
+  if ($("ingredient-reference-calories").value === "" || input.referenceCalories < 0) {
+    setFieldError($("ingredient-reference-calories"), "Enter calories of zero or greater.");
+    invalid.push($("ingredient-reference-calories"));
+  }
+  if (!(input.referenceAmount > 0)) {
+    setFieldError($("ingredient-reference-amount"), "Enter an amount greater than zero.");
+    invalid.push($("ingredient-reference-amount"));
+  }
+  if (invalid.length) {
+    showMessage("Please correct the highlighted ingredient fields.");
+    focusFirstInvalid(invalid[0]);
+    return;
+  }
+
+  isSavingIngredient = true;
+  try {
+    const result = editingIngredientId
+      ? window.SHDPIngredients.updateIngredient(localStorage, activeIngredientDatabase, editingIngredientId, input)
+      : window.SHDPIngredients.createIngredient(localStorage, activeIngredientDatabase, input);
+    if (result.status === "failed") {
+      showMessage(`Ingredient could not be saved: ${result.error}`);
+      return;
+    }
+    const message = editingIngredientId ? `${result.ingredient.name} updated.` : `${result.ingredient.name} added.`;
+    closeDialog("ingredient-dialog");
+    editingIngredientId = null;
+    refreshCategoryViews();
+    renderIngredientDatabase();
+    showMessage(message);
+  } finally {
+    isSavingIngredient = false;
+  }
 });
 
 // Weight tracking
@@ -1329,10 +1517,11 @@ $("save-settings-button").addEventListener("click", () => {
 function refreshApplicationUI() {
   populateSettings();
   loadRecipeOptions();
-  populateRecipeFilters();
+  refreshCategoryViews();
   updateDashboard();
   renderMealHistory();
   renderRecipeHandbook();
+  renderIngredientDatabase();
   renderWeeklyProgress();
 }
 
@@ -1432,14 +1621,15 @@ $("reset-data-button").addEventListener("click", () => {
 
 // Initial application start
 populateIngredientOptions();
+refreshCategoryViews();
 populateSettings();
 createIngredientRow();
 loadRecipeOptions();
 renderCurrentMeal();
 updateDashboard();
 renderMealHistory();
-populateRecipeFilters();
 renderRecipeHandbook();
+renderIngredientDatabase();
 renderWeeklyProgress();
 reportMigrationStatus();
 reportIngredientStoreStatus();

@@ -124,3 +124,132 @@ test("preserves every Version 1.3 starter ingredient and nutrition value", () =>
     assert.deepEqual(preservedFields, original);
   });
 });
+
+test("creates, edits, categorizes, and soft-deletes an ingredient transactionally", () => {
+  const storage = new MemoryStorage();
+  const initialized = ingredientApi.initialize(storage, starters, "2026-07-28T00:00:00.000Z");
+  const created = ingredientApi.createIngredient(storage, initialized.ingredients, {
+    name: "Cucumber",
+    aliases: ["Kakdi"],
+    category: "Vegetables",
+    referenceCalories: 15,
+    referenceAmount: 100,
+    referenceUnit: "g"
+  }, "2026-07-29T01:00:00.000Z");
+  assert.equal(created.status, "ready");
+  assert.equal(ingredientApi.findIngredient(initialized.ingredients, "kakdi").id, created.ingredient.id);
+  assert.equal(created.ingredient.category, "Vegetables");
+
+  const updated = ingredientApi.updateIngredient(storage, initialized.ingredients, created.ingredient.id, {
+    name: "Cucumber",
+    aliases: ["Kakdi", "Cucumber raw"],
+    category: "Fresh Vegetables",
+    referenceCalories: 16,
+    referenceAmount: 100,
+    referenceUnit: "g"
+  }, "2026-07-29T02:00:00.000Z");
+  assert.equal(updated.status, "ready");
+  assert.equal(updated.ingredient.category, "Fresh Vegetables");
+  assert.equal(updated.ingredient.revision, 2);
+  assert.equal(ingredientApi.findIngredient(initialized.ingredients, "cucumber raw").id, created.ingredient.id);
+
+  const deleted = ingredientApi.deleteIngredient(
+    storage,
+    initialized.ingredients,
+    created.ingredient.id,
+    "2026-07-29T03:00:00.000Z"
+  );
+  assert.equal(deleted.status, "ready");
+  assert.equal(ingredientApi.findIngredient(initialized.ingredients, "Cucumber"), null);
+  assert.equal(deleted.ingredient.deletedAt, "2026-07-29T03:00:00.000Z");
+  assert.equal(deleted.ingredient.revision, 3);
+  assert.ok(JSON.parse(storage.getItem(ingredientApi.STORAGE_KEY)).find(item => item.id === created.ingredient.id));
+});
+
+test("prevents collisions across ingredient names and aliases during add and edit", () => {
+  const storage = new MemoryStorage();
+  const initialized = ingredientApi.initialize(storage, starters, "2026-07-28T00:00:00.000Z");
+  const duplicateAlias = ingredientApi.createIngredient(storage, initialized.ingredients, {
+    name: "Aloo",
+    category: "Vegetables",
+    referenceCalories: 77,
+    referenceAmount: 100,
+    referenceUnit: "g"
+  });
+  assert.equal(duplicateAlias.status, "failed");
+  assert.match(duplicateAlias.error, /already belongs/i);
+
+  const created = ingredientApi.createIngredient(storage, initialized.ingredients, {
+    name: "Cucumber",
+    aliases: ["Kakdi"],
+    category: "Vegetables",
+    referenceCalories: 15,
+    referenceAmount: 100,
+    referenceUnit: "g"
+  });
+  const conflictingEdit = ingredientApi.updateIngredient(storage, initialized.ingredients, created.ingredient.id, {
+    name: "Cucumber",
+    aliases: ["Oil"],
+    category: "Vegetables",
+    referenceCalories: 15,
+    referenceAmount: 100,
+    referenceUnit: "g"
+  });
+  assert.equal(conflictingEdit.status, "failed");
+  assert.equal(ingredientApi.findIngredient(initialized.ingredients, "Kakdi").id, created.ingredient.id);
+});
+
+test("persists ingredient categories and collects current categories after refresh", () => {
+  const storage = new MemoryStorage();
+  const initialized = ingredientApi.initialize(storage, starters, "2026-07-28T00:00:00.000Z");
+  ingredientApi.createIngredient(storage, initialized.ingredients, {
+    name: "Cucumber",
+    category: "Fresh Vegetables",
+    referenceCalories: 15,
+    referenceAmount: 100,
+    referenceUnit: "g"
+  });
+  const refreshed = ingredientApi.initialize(storage, starters, "2026-07-29T00:00:00.000Z");
+  assert.equal(refreshed.status, "ready");
+  assert.equal(ingredientApi.findIngredient(refreshed.ingredients, "Cucumber").category, "Fresh Vegetables");
+  assert.deepEqual(
+    ingredientApi.collectCategories(refreshed.ingredients),
+    ["Fresh Vegetables", "Uncategorized"]
+  );
+});
+
+test("assigns a recipe category to automatically created ingredients", () => {
+  const storage = new MemoryStorage();
+  const initialized = ingredientApi.initialize(storage, starters, "2026-07-28T00:00:00.000Z");
+  const result = ingredientApi.registerRecipeIngredients(storage, [{
+    name: "Curry Leaf",
+    category: "Herbs",
+    manualCalories: 108,
+    manualAmount: 100,
+    manualUnit: "g"
+  }], initialized.ingredients, "2026-07-29T00:00:00.000Z");
+  assert.equal(result.status, "ready");
+  assert.equal(result.created[0].category, "Herbs");
+});
+
+test("does not mutate an ingredient during a failed edit or delete persistence", () => {
+  const storage = new MemoryStorage();
+  const initialized = ingredientApi.initialize(storage, starters, "2026-07-28T00:00:00.000Z");
+  const before = JSON.stringify(initialized.ingredients);
+  storage.setItem = () => { throw new Error("Quota exceeded"); };
+
+  const edited = ingredientApi.updateIngredient(storage, initialized.ingredients, "I001", {
+    name: "Potato, raw",
+    aliases: ["Potato", "Aloo"],
+    category: "Vegetables",
+    referenceCalories: 78,
+    referenceAmount: 100,
+    referenceUnit: "g"
+  });
+  assert.equal(edited.status, "failed");
+  assert.equal(JSON.stringify(initialized.ingredients), before);
+
+  const deleted = ingredientApi.deleteIngredient(storage, initialized.ingredients, "I001");
+  assert.equal(deleted.status, "failed");
+  assert.equal(JSON.stringify(initialized.ingredients), before);
+});

@@ -33,17 +33,19 @@ No Version 1.3 release file or branch is modified.
 
 ## Version detection
 
-The explicit marker is now authoritative. It contains the application ID,
-release (`1.4A`), numeric schema version (`2`), source release, migration
-state, synchronization-verification state, and timestamps.
+The explicit marker is authoritative. It contains the application ID, release,
+numeric schema version, source release, migration state,
+synchronization-verification state, and timestamps. Version 1.4B continues
+using schema 2 and advances a verified Version 1.4A marker in place.
 
-- A valid schema-2/Version-1.4A marker identifies the current release.
+- A valid schema-2 marker for Version 1.4A or Version 1.4B identifies a
+  compatible current installation.
 - A marker with a supported older schema identifies a legacy installation.
 - A future schema or incompatible release is rejected without changing data.
 - If no marker exists, known Version 1.3 keys and optional schema-1 metadata
   identify a Version 1.3 installation.
 - If neither a marker nor Version 1.3 data exists, the installation is fresh
-  and receives a Version 1.4A marker.
+  and receives a marker for the current release.
 
 This is backward compatible because Version 1.3 never required the marker.
 Existing users are detected by their original keys, backed up, validated, and
@@ -63,7 +65,7 @@ release/schema pair instead of guessing from key presence.
 8. Build a separate schema-2 candidate; do not replace Version 1.3 source keys.
 9. Compare candidate/source counts and raw-entry checksums.
 10. Persist, re-read, and revalidate the candidate.
-11. Write the Version 1.4A marker with `local-validated`, sync `pending`, and
+11. Write the current release marker with `local-validated`, sync `pending`, and
     `migrationComplete: false`.
 12. Permit a later cloud phase to attempt synchronization.
 13. Only a successful Supabase read-back verification may set
@@ -130,8 +132,9 @@ that the device has enough storage for source, backup, and candidate copies.
 
 ## Future compatibility
 
-Future migrations must preserve the marker and add explicit routes such as
-`1.4A/schema 2` to `1.4B/schema 3`. A future release must never silently
-downgrade an unknown marker. Backup deletion requires a separate, auditable
-policy after verified cloud read-back; Phase 1 deliberately provides no
-automatic deletion.
+Future migrations must preserve the marker and add explicit compatibility
+routes. Version 1.4B demonstrates a same-schema release transition from
+`1.4A/schema 2` to `1.4B/schema 2` without remigrating source data. A future
+release must never silently downgrade an unknown marker. Backup deletion
+requires a separate, auditable policy after verified cloud read-back; Phase 1
+deliberately provides no automatic deletion.

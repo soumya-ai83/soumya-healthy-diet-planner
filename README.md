@@ -49,3 +49,19 @@ The Phase 2 persistent Ingredient Master Database, automatic recipe-driven
 expansion, duplicate prevention, offline behavior, and Phase 3 handoff are
 documented in
 [`docs/phase-2-ingredient-database.md`](docs/phase-2-ingredient-database.md).
+
+## Version 1.4B development
+
+Version 1.4B adds a complete local Ingredient Database interface for mobile
+use. Ingredients can be added, edited, soft-deleted, searched, and filtered by
+category. A floating Add Ingredient button remains available above the mobile
+bottom navigation while the Ingredient Database is open.
+
+Recipe and ingredient category choices are rebuilt from the current persisted
+records after every relevant change. Unknown ingredients entered while adding
+or editing a recipe are created automatically with duplicate-safe name and
+alias matching.
+
+The Version 1.4B architecture, storage compatibility, category refresh
+strategy, and test coverage are documented in
+[`docs/version-1.4b-ingredient-management.md`](docs/version-1.4b-ingredient-management.md).

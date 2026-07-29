@@ -1,6 +1,6 @@
 /*
 Soumya Healthy Diet Planner
-Version 1.4A migration safety foundation
+Version 1.4B using the Version 1.4A migration safety foundation
 
 This file runs before the main application. It never rewrites Version 1.3
 application records. It creates and validates a separate migration backup and
@@ -14,7 +14,8 @@ verified local data.
   const SOURCE_SCHEMA_VERSION = 1;
   const TARGET_SCHEMA_VERSION = 2;
   const SOURCE_RELEASE = "1.3";
-  const TARGET_RELEASE = "1.4A";
+  const TARGET_RELEASE = "1.4B";
+  const COMPATIBLE_SCHEMA_2_RELEASES = Object.freeze(["1.4A", "1.4B"]);
   const APPLICATION_ID = "soumya-healthy-diet-planner";
   const APP_STORAGE_PREFIX = "soumyaHealthyDiet";
   const MIGRATION_STORAGE = Object.freeze({
@@ -213,8 +214,8 @@ verified local data.
     if (Number(marker.schemaVersion) > TARGET_SCHEMA_VERSION) {
       throw new Error(`Application schema ${marker.schemaVersion} is newer than supported schema ${TARGET_SCHEMA_VERSION}.`);
     }
-    if (Number(marker.schemaVersion) === TARGET_SCHEMA_VERSION && marker.release !== TARGET_RELEASE) {
-      throw new Error(`Application release ${marker.release || "unknown"} is not supported by this Version 1.4A build.`);
+    if (Number(marker.schemaVersion) === TARGET_SCHEMA_VERSION && !COMPATIBLE_SCHEMA_2_RELEASES.includes(marker.release)) {
+      throw new Error(`Application release ${marker.release || "unknown"} is not supported by this Version 1.4B build.`);
     }
     return marker;
   }
@@ -278,6 +279,16 @@ verified local data.
     return persisted;
   }
 
+  function advanceReleaseMarker(storage, marker, now) {
+    if (marker.release === TARGET_RELEASE) return marker;
+    return writeVersionMarker(storage, {
+      ...marker,
+      previousRelease: marker.release,
+      release: TARGET_RELEASE,
+      updatedAt: now
+    });
+  }
+
   function runMigration(storage = globalScope.localStorage, now = new Date().toISOString()) {
     if (!storage) {
       return { status: "failed", migrated: false, error: "Browser storage is unavailable." };
@@ -334,14 +345,40 @@ verified local data.
     if (installation.type === "current" && existingStatus?.status === "completed" && existingBackup && existingCandidate) {
       try {
         validateCandidate(existingCandidate, existingBackup.rawEntries || {});
+        const marker = advanceReleaseMarker(storage, installation.marker, now);
         return {
           ...existingStatus,
+          targetRelease: TARGET_RELEASE,
+          versionMarker: marker,
           migrated: false,
           reusedVerifiedMigration: true,
           migrationComplete: existingStatus.syncVerificationStatus === "verified"
         };
       } catch (error) {
         // Continue with a fresh candidate built from untouched Version 1.3 keys.
+      }
+    }
+    if (installation.type === "current" && existingStatus?.status === "not-needed" && installation.marker?.migrationState === "current") {
+      try {
+        const marker = advanceReleaseMarker(storage, installation.marker, now);
+        const result = {
+          ...existingStatus,
+          targetRelease: TARGET_RELEASE,
+          versionMarker: marker,
+          migrated: false,
+          reusedCurrentInstallation: true,
+          migrationComplete: true
+        };
+        storage.setItem(MIGRATION_STORAGE.status, JSON.stringify(result));
+        return result;
+      } catch (error) {
+        return {
+          status: "failed",
+          migrated: false,
+          cloudSyncAllowed: false,
+          migrationComplete: false,
+          error: error.message || "Application release marker could not be advanced."
+        };
       }
     }
 
@@ -476,6 +513,7 @@ verified local data.
     TARGET_SCHEMA_VERSION,
     SOURCE_RELEASE,
     TARGET_RELEASE,
+    COMPATIBLE_SCHEMA_2_RELEASES,
     MIGRATION_STORAGE,
     VERSION_13_STORAGE,
     buildCandidate,
