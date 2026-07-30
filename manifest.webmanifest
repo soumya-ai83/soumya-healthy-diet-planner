@@ -3,7 +3,7 @@
   "name": "Soumya Healthy Diet Planner",
   "short_name": "Healthy Diet",
   "description": "Track meals, recipes, weight, and calorie progress with JatiaBaba.",
-  "start_url": "./",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "display_override": [

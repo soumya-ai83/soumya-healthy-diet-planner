@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.4b-recipe-ingredient-fab"; // Bump this value whenever app-shell assets change.
+const CACHE_VERSION = "v1.4c-ingredient-sync-fix"; // Bump this value whenever app-shell assets change.
 const CACHE_PREFIX = "soumya-healthy-diet-";
 const SHELL_CACHE = `${CACHE_PREFIX}${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}${CACHE_VERSION}-runtime`;
@@ -11,6 +11,8 @@ const APP_SHELL = [
   "./js/storage.js",
   "./js/data.js",
   "./js/ingredients.js",
+  "./js/config.js",
+  "./js/sync.js",
   "./js/script.js",
   "./manifest.webmanifest",
   "./assets/jatiababa/jatiababa-ask.png",
@@ -38,17 +40,20 @@ async function trimRuntimeCache() {
   await Promise.all(keys.slice(0, Math.max(0, keys.length - MAX_RUNTIME_ENTRIES)).map(key => cache.delete(key)));
 }
 
-async function networkFirstNavigation(request) {
+async function appShellNavigation(request) {
+  const cachedShell = await caches.match("./index.html");
+  if (cachedShell) return cachedShell;
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    const contentType = response.headers.get("content-type") || "";
+    if (response.ok && contentType.includes("text/html")) {
       const cache = await caches.open(SHELL_CACHE);
       await cache.put("./index.html", response.clone());
+      return response;
     }
-    return response;
+    return Response.error();
   } catch (error) {
-    const cached = await caches.match(request);
-    return cached || caches.match("./index.html") || Promise.reject(error);
+    return Response.error();
   }
 }
 
@@ -91,7 +96,7 @@ self.addEventListener("fetch", event => {
   if (!["http:", "https:"].includes(url.protocol) || url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirstNavigation(request));
+    event.respondWith(appShellNavigation(request));
     return;
   }
 

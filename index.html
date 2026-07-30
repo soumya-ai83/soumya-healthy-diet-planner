@@ -226,7 +226,7 @@
         </div>
       </article>
       <article class="panel data-management-panel">
-        <div class="panel-heading"><div><h3>Data Management</h3><p>Back up, restore, or reset the data stored on this device.</p></div><span class="version-badge">Version 1.3</span></div>
+        <div class="panel-heading"><div><h3>Data Management</h3><p>Back up, restore, or reset the data stored on this device.</p></div><span class="version-badge">Version 1.4C</span></div>
         <div class="data-management-grid">
           <section><h4>Export Backup</h4><p>Download meals, recipes, settings, and weight history as one JSON file.</p><button class="secondary-button" id="export-data-button">Export Data</button></section>
           <section><h4>Import Backup</h4><p>Review a compatible backup summary before replacing this device's app data.</p><label class="secondary-button file-button" for="import-data-input">Choose Backup</label><input class="visually-hidden" type="file" id="import-data-input" accept=".json,application/json"></section>
@@ -267,7 +267,14 @@
         <h3 class="section-title">Choose Entry Type</h3>
         <div class="entry-type-grid"><button class="entry-type-card active" data-entry-type="recipe"><span>📚</span><strong>Recipe</strong><small>From Handbook</small></button><button class="entry-type-card" data-entry-type="custom"><span>✏️</span><strong>Manual</strong><small>Food + calories</small></button><button class="entry-type-card" data-entry-type="jatibaba"><span class="jatibaba-ai-tab-icon" aria-hidden="true"><img src="assets/jatiababa/jatiababa-hero.png" alt=""><i>✦</i></span><strong>JatiaBaba</strong><small>Photo + estimate</small></button></div>
 
-        <section id="recipe-entry" class="entry-panel active-entry-panel"><div class="form-grid"><div class="form-group"><label for="recipe-selection">Select Recipe</label><select id="recipe-selection"><option value="">Choose a saved recipe</option></select></div><div class="form-group"><label for="serving-amount">Serving Amount</label><input type="number" id="serving-amount" min="0.25" step="0.25" value="1"></div></div><div class="button-row"><button class="primary-button" id="add-recipe-item-button">Add to Meal</button><button class="secondary-button" id="ignore-recipe-button">Clear</button></div></section>
+        <section id="recipe-entry" class="entry-panel active-entry-panel">
+          <div class="meal-recipe-filters">
+            <div class="form-group"><label for="meal-recipe-search">Search Recipes</label><input type="search" id="meal-recipe-search" placeholder="Type a recipe name" autocomplete="off"></div>
+            <div class="form-group"><label for="meal-recipe-category-filter">Category</label><select id="meal-recipe-category-filter"><option value="">All categories</option></select></div>
+          </div>
+          <div class="form-grid"><div class="form-group"><label for="recipe-selection">Select Recipe</label><select id="recipe-selection"><option value="">Choose a saved recipe</option></select><small id="meal-recipe-result-count" class="field-hint" aria-live="polite"></small></div><div class="form-group"><label for="serving-amount">Serving Amount</label><input type="number" id="serving-amount" min="0.25" step="0.25" value="1"></div></div>
+          <div class="button-row"><button class="primary-button" id="add-recipe-item-button">Add to Meal</button><button class="secondary-button" id="ignore-recipe-button">Clear</button></div>
+        </section>
 
         <section id="custom-entry" class="entry-panel"><div class="form-grid"><div class="form-group"><label for="custom-food-name">Food Name</label><input type="text" id="custom-food-name" placeholder="Example: Apple"></div><div class="form-group"><label for="custom-food-calories">Calories</label><input type="number" id="custom-food-calories" min="0" inputmode="decimal" placeholder="Example: 95"></div><div class="form-group"><label for="custom-food-details">Details or Serving Amount</label><input type="text" id="custom-food-details" placeholder="Example: 1.5 servings"></div></div><div class="button-row"><button class="primary-button" id="add-custom-item-button">Add to Meal</button><button class="secondary-button" id="ignore-custom-button">Clear</button></div></section>
 
@@ -337,6 +344,8 @@
   <script src="js/storage.js"></script>
   <script src="js/data.js"></script>
   <script src="js/ingredients.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/sync.js"></script>
   <script src="js/script.js"></script>
 </body>
 </html>

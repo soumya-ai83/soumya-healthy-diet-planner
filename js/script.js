@@ -42,6 +42,7 @@ let isSavingRecipe = false;
 let isSavingIngredient = false;
 let isSavingWeight = false;
 let isImportingData = false;
+let sharedSyncManager = null;
 
 const today = new Date();
 const todayForInput = getLocalDateString(today);
@@ -262,6 +263,16 @@ function saveAll() {
   localStorage.setItem(STORAGE.metadata, JSON.stringify(applicationMetadata));
 }
 
+function queueSharedMutation(entity, record) {
+  if (!window.SHDPSharedSync || !record) return;
+  try {
+    window.SHDPSharedSync.queueMutation(localStorage, entity, record);
+    sharedSyncManager?.syncNow();
+  } catch (error) {
+    console.warn(`[V1.4C Sync] Unable to queue ${entity}.`, error);
+  }
+}
+
 function showMessage(message) {
   const toast = $("toast");
   toast.textContent = message;
@@ -422,14 +433,44 @@ $all(".entry-type-card").forEach(button => button.addEventListener("click", () =
 // Recipe options
 function loadRecipeOptions() {
   const select = $("recipe-selection");
+  const searchInput = $("meal-recipe-search");
+  const categorySelect = $("meal-recipe-category-filter");
+  const previousRecipeId = select.value;
+  const searchText = String(searchInput?.value || "").trim().toLocaleLowerCase();
+  const selectedCategory = String(categorySelect?.value || "");
+  const categories = Array.from(new Set(savedRecipes.map(recipe => String(recipe.category || "").trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b));
+
+  if (categorySelect) {
+    categorySelect.innerHTML = '<option value="">All categories</option>';
+    categories.forEach(category => {
+      const option = document.createElement("option");
+      option.value = category;
+      option.textContent = category;
+      categorySelect.appendChild(option);
+    });
+    categorySelect.value = categories.includes(selectedCategory) ? selectedCategory : "";
+  }
+
+  const matchingRecipes = savedRecipes
+    .filter(recipe => !searchText || String(recipe.name || "").toLocaleLowerCase().includes(searchText))
+    .filter(recipe => !categorySelect?.value || recipe.category === categorySelect.value)
+    .sort((a, b) => a.name.localeCompare(b.name));
   select.innerHTML = '<option value="">Choose a saved recipe</option>';
-  [...savedRecipes].sort((a, b) => a.name.localeCompare(b.name)).forEach(recipe => {
+  matchingRecipes.forEach(recipe => {
     const option = document.createElement("option");
     option.value = recipe.id;
     option.textContent = `${recipe.name} — ${formatCalories(recipe.caloriesPerServing)}/serving`;
     select.appendChild(option);
   });
+  if (matchingRecipes.some(recipe => recipe.id === previousRecipeId)) select.value = previousRecipeId;
+  const resultCount = $("meal-recipe-result-count");
+  if (resultCount) {
+    resultCount.textContent = `${matchingRecipes.length} recipe${matchingRecipes.length === 1 ? "" : "s"} available`;
+  }
 }
+$("meal-recipe-search")?.addEventListener("input", loadRecipeOptions);
+$("meal-recipe-category-filter")?.addEventListener("change", loadRecipeOptions);
 
 // Current meal
 function calculateCurrentMealTotal() {
@@ -527,7 +568,13 @@ function clearJatibabaEntry() {
   $("jatibaba-description").value = ""; $("jatibaba-calories").value = ""; $("jatibaba-photo").value = "";
   $("jatibaba-preview").hidden = true; $("jatibaba-preview").removeAttribute("src");
 }
-$("ignore-recipe-button").addEventListener("click", () => { $("recipe-selection").value = ""; $("serving-amount").value = 1; });
+$("ignore-recipe-button").addEventListener("click", () => {
+  $("meal-recipe-search").value = "";
+  $("meal-recipe-category-filter").value = "";
+  $("recipe-selection").value = "";
+  $("serving-amount").value = 1;
+  loadRecipeOptions();
+});
 $("ignore-custom-button").addEventListener("click", clearCustomEntry);
 $("ignore-jatibaba-button").addEventListener("click", clearJatibabaEntry);
 
@@ -970,14 +1017,25 @@ $("save-new-recipe-button").addEventListener("click", () => {
       caloriesPerServing: Math.round(nutrition.perServing)
     };
     const editedRecipe = editingRecipeId ? savedRecipes.find(recipe => recipe.id === editingRecipeId) : null;
+    const recipeUpdatedAt = new Date().toISOString();
+    let savedRecipe;
     if (editedRecipe) {
-      Object.assign(editedRecipe, recipeData, { updatedAt: new Date().toISOString() });
+      Object.assign(editedRecipe, recipeData, {
+        revision: Number(editedRecipe.revision || 0) + 1,
+        updatedAt: recipeUpdatedAt,
+        syncStatus: "pending"
+      });
+      savedRecipe = editedRecipe;
     } else {
-      savedRecipes.push({
+      savedRecipe = {
         id: `R${String(savedRecipes.length + 1).padStart(3, "0")}-${Date.now().toString(36)}`,
         ...recipeData,
-        createdAt: new Date().toISOString()
-      });
+        revision: 1,
+        createdAt: recipeUpdatedAt,
+        updatedAt: recipeUpdatedAt,
+        syncStatus: "pending"
+      };
+      savedRecipes.push(savedRecipe);
     }
     const successMessage = editedRecipe ? `${name} updated successfully.` : `${name} added to the Recipe Master Database.`;
     saveAll();
@@ -992,6 +1050,8 @@ $("save-new-recipe-button").addEventListener("click", () => {
         created: [],
         error: "Stored ingredient data was preserved because its safety check did not pass."
       };
+    queueSharedMutation("recipe", savedRecipe);
+    ingredientExpansion.created.forEach(ingredient => queueSharedMutation("ingredient", ingredient));
     loadRecipeOptions();
     refreshCategoryViews();
     renderRecipeHandbook();
@@ -1147,9 +1207,18 @@ function openMealFromRecipe(recipeId) {
 function deleteRecipe(recipeId) {
   const recipe = savedRecipes.find(item => item.id === recipeId);
   if (!recipe || !confirm(`Delete "${recipe.name}" from the Recipe Handbook? Historical meals already logged with this recipe will not be changed.`)) return;
+  const deletedAt = new Date().toISOString();
+  const recipeTombstone = {
+    ...recipe,
+    revision: Number(recipe.revision || 0) + 1,
+    updatedAt: deletedAt,
+    deletedAt,
+    syncStatus: "pending"
+  };
   savedRecipes = savedRecipes.filter(item => item.id !== recipe.id);
   selectedRecipeDetailsId = null;
   saveAll();
+  queueSharedMutation("recipe", recipeTombstone);
   closeDialog("recipe-details-dialog");
   loadRecipeOptions();
   refreshCategoryViews();
@@ -1281,6 +1350,7 @@ function removeIngredient(ingredientId) {
   if (!ingredient || !confirm(`Delete "${ingredient.name}" from the Ingredient Database? Existing recipes and meal history will not be changed.`)) return;
   const result = window.SHDPIngredients.deleteIngredient(localStorage, activeIngredientDatabase, ingredientId);
   if (result.status === "failed") return showMessage(`Ingredient could not be deleted: ${result.error}`);
+  queueSharedMutation("ingredient", result.ingredient);
   refreshCategoryViews();
   renderIngredientDatabase();
   showMessage(`${ingredient.name} deleted. Existing recipes were preserved.`);
@@ -1331,6 +1401,7 @@ $("save-ingredient-button").addEventListener("click", () => {
       showMessage(`Ingredient could not be saved: ${result.error}`);
       return;
     }
+    queueSharedMutation("ingredient", result.ingredient);
     const message = editingIngredientId ? `${result.ingredient.name} updated.` : `${result.ingredient.name} added.`;
     closeDialog("ingredient-dialog");
     editingIngredientId = null;
@@ -1637,7 +1708,7 @@ renderWeeklyProgress();
 reportMigrationStatus();
 reportIngredientStoreStatus();
 
-// Version 1.3 PWA support
+// Version 1.4C PWA support
 const INSTALL_PROMPT_DISMISSED_KEY = "soumyaHealthyDietInstallPromptDismissed";
 let deferredInstallPrompt = null;
 
@@ -1712,6 +1783,81 @@ window.addEventListener("appinstalled", () => {
 });
 
 updateInstallAppUI();
+
+function applySharedState({ recipes, ingredients }) {
+  const nextRecipes = normalizeRecipeCollection((recipes || []).filter(recipe => !recipe.deletedAt));
+  const nextIngredients = Array.isArray(ingredients) ? ingredients : [];
+  window.SHDPIngredients.assertValidCollection(nextIngredients);
+  const previousRecipesRaw = localStorage.getItem(STORAGE.recipes);
+  const previousIngredientsRaw = localStorage.getItem(window.SHDPIngredients.STORAGE_KEY);
+  const recipesRaw = JSON.stringify(nextRecipes);
+  const ingredientsRaw = JSON.stringify(nextIngredients);
+  try {
+    localStorage.setItem(STORAGE.recipes, recipesRaw);
+    localStorage.setItem(window.SHDPIngredients.STORAGE_KEY, ingredientsRaw);
+    if (localStorage.getItem(STORAGE.recipes) !== recipesRaw
+      || localStorage.getItem(window.SHDPIngredients.STORAGE_KEY) !== ingredientsRaw) {
+      throw new Error("Shared records could not be verified after local persistence.");
+    }
+  } catch (error) {
+    if (previousRecipesRaw === null) localStorage.removeItem(STORAGE.recipes);
+    else localStorage.setItem(STORAGE.recipes, previousRecipesRaw);
+    if (previousIngredientsRaw === null) localStorage.removeItem(window.SHDPIngredients.STORAGE_KEY);
+    else localStorage.setItem(window.SHDPIngredients.STORAGE_KEY, previousIngredientsRaw);
+    throw error;
+  }
+  savedRecipes = nextRecipes;
+  activeIngredientDatabase.splice(0, activeIngredientDatabase.length, ...nextIngredients);
+  loadRecipeOptions();
+  refreshCategoryViews();
+  renderRecipeHandbook();
+  renderIngredientDatabase();
+}
+
+function markInitialSharedSyncVerified(verification) {
+  const migration = window.SHDPMigrationResult;
+  if (migration?.status !== "completed" || migration.syncVerificationStatus === "verified") return;
+  try {
+    window.SHDPStorage?.markSupabaseSyncVerified(localStorage, verification);
+  } catch (error) {
+    console.warn("[V1.4C Migration] Shared synchronization was verified, but the migration gate remains pending.", error);
+  }
+}
+
+if (window.SHDPSharedSync && window.SHDPMigrationResult?.status !== "failed") {
+  sharedSyncManager = window.SHDPSharedSync.createManager({
+    storage: localStorage,
+    config: window.SHDP_CONFIG,
+    getState: () => ({
+      recipes: savedRecipes,
+      ingredients: activeIngredientDatabase
+    }),
+    applyState: applySharedState,
+    onVerifiedSync: markInitialSharedSyncVerified,
+    onError: error => {
+      const pending = window.SHDPSharedSync.readOutbox(localStorage);
+      const pendingEntities = pending.reduce((counts, item) => {
+        counts[item.entity] = (counts[item.entity] || 0) + 1;
+        return counts;
+      }, {});
+      const safeDiagnostic = {
+        message: error.message,
+        pendingCount: pending.length,
+        pendingEntities
+      };
+      const isDevelopmentHost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+      if (isDevelopmentHost) {
+        console.error("[V1.4C Sync] Shared synchronization failed; queued changes were retained.", safeDiagnostic);
+      } else {
+        console.warn("[V1.4C Sync] Shared data synchronization will retry.", safeDiagnostic);
+      }
+      if (window.SHDPMigrationResult?.status === "completed") {
+        window.SHDPStorage?.markSupabaseSyncFailed(localStorage, error.message);
+      }
+    }
+  });
+  sharedSyncManager.start();
+}
 
 if ("serviceWorker" in navigator) {
   const isLocalDevelopment = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);

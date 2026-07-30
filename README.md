@@ -1,6 +1,9 @@
 # Soumya Healthy Diet Planner
 
-Soumya Healthy Diet Planner is a local-first meal, recipe, weight, and calorie tracker. Version 1.3 adds installable Progressive Web App support without changing the existing data model or interface.
+Soumya Healthy Diet Planner is a local-first meal, recipe, weight, and calorie
+tracker. Version 1.4C optionally synchronizes the shared Recipe Handbook and
+Ingredient Database through Supabase while keeping every person's meals,
+weight, goals, progress, and settings private on their device.
 
 ## Run locally
 
@@ -35,7 +38,10 @@ Use the browser's **Install app** action, or open **Settings → Install App** i
 
 ## Data safety
 
-Meals, recipes, settings, and weight history remain in the current browser or installed app's local storage. Version 1.3 does not add accounts, cloud backup, or cross-device synchronization.
+Meals, settings, goals, progress, and weight history remain in the current
+browser or installed app's local storage and are never sent by the Version
+1.4C synchronization module. Recipes and ingredients remain local-first and
+are shared only when Supabase is configured.
 
 Export a backup from **Settings → Data Management** before clearing browser storage, removing site data, or changing devices. Clearing cached application files is different from clearing browser storage; clearing site storage can remove personal app data.
 
@@ -65,3 +71,13 @@ alias matching.
 The Version 1.4B architecture, storage compatibility, category refresh
 strategy, and test coverage are documented in
 [`docs/version-1.4b-ingredient-management.md`](docs/version-1.4b-ingredient-management.md).
+
+## Version 1.4C development
+
+Version 1.4C adds opt-in global recipe and ingredient synchronization, guarded
+Version 1.3 data recovery, recipe search/category filtering inside Add Meal,
+and a cache-first installed-app launch. Setup, architecture, migration,
+security boundaries, test instructions, and deployment checks are documented
+in [`docs/version-1.4c-release.md`](docs/version-1.4c-release.md). The required
+database objects are in
+[`docs/supabase-version-1.4c.sql`](docs/supabase-version-1.4c.sql).

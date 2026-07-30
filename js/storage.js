@@ -1,6 +1,6 @@
 /*
 Soumya Healthy Diet Planner
-Version 1.4B using the Version 1.4A migration safety foundation
+Version 1.4C using the Version 1.4A migration safety foundation
 
 This file runs before the main application. It never rewrites Version 1.3
 application records. It creates and validates a separate migration backup and
@@ -14,8 +14,8 @@ verified local data.
   const SOURCE_SCHEMA_VERSION = 1;
   const TARGET_SCHEMA_VERSION = 2;
   const SOURCE_RELEASE = "1.3";
-  const TARGET_RELEASE = "1.4B";
-  const COMPATIBLE_SCHEMA_2_RELEASES = Object.freeze(["1.4A", "1.4B"]);
+  const TARGET_RELEASE = "1.4C";
+  const COMPATIBLE_SCHEMA_2_RELEASES = Object.freeze(["1.4A", "1.4B", "1.4C"]);
   const APPLICATION_ID = "soumya-healthy-diet-planner";
   const APP_STORAGE_PREFIX = "soumyaHealthyDiet";
   const MIGRATION_STORAGE = Object.freeze({
@@ -215,7 +215,7 @@ verified local data.
       throw new Error(`Application schema ${marker.schemaVersion} is newer than supported schema ${TARGET_SCHEMA_VERSION}.`);
     }
     if (Number(marker.schemaVersion) === TARGET_SCHEMA_VERSION && !COMPATIBLE_SCHEMA_2_RELEASES.includes(marker.release)) {
-      throw new Error(`Application release ${marker.release || "unknown"} is not supported by this Version 1.4B build.`);
+      throw new Error(`Application release ${marker.release || "unknown"} is not supported by this Version 1.4C build.`);
     }
     return marker;
   }
@@ -289,6 +289,54 @@ verified local data.
     });
   }
 
+  function isEmptyStoredValue(rawValue, expectedType) {
+    if (rawValue === null) return true;
+    let parsed;
+    try {
+      parsed = JSON.parse(rawValue);
+    } catch (error) {
+      return false;
+    }
+    if (expectedType === "array") return Array.isArray(parsed) && parsed.length === 0;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length === 0;
+  }
+
+  function rehydrateValidatedCandidate(storage, candidate, backup) {
+    validateCandidate(candidate, backup?.rawEntries || {});
+    const recoveryFields = [
+      [VERSION_13_STORAGE.meals, candidate.meals, "array"],
+      [VERSION_13_STORAGE.recipes, candidate.recipes, "array"],
+      [VERSION_13_STORAGE.settings, candidate.settings, "object"],
+      [VERSION_13_STORAGE.weightHistory, candidate.weightHistory, "array"],
+      [VERSION_13_STORAGE.metadata, candidate.metadata, "object"]
+    ];
+    const originalValues = new Map();
+    const restoredKeys = [];
+
+    try {
+      recoveryFields.forEach(([key, protectedValue, expectedType]) => {
+        const liveRaw = storage.getItem(key);
+        const protectedHasData = expectedType === "array"
+          ? Array.isArray(protectedValue) && protectedValue.length > 0
+          : protectedValue && typeof protectedValue === "object" && Object.keys(protectedValue).length > 0;
+        if (!protectedHasData || !isEmptyStoredValue(liveRaw, expectedType)) return;
+        originalValues.set(key, liveRaw);
+        const serialized = JSON.stringify(protectedValue);
+        storage.setItem(key, serialized);
+        if (storage.getItem(key) !== serialized) throw new Error(`${key} could not be restored and verified.`);
+        restoredKeys.push(key);
+      });
+      return restoredKeys;
+    } catch (error) {
+      restoredKeys.forEach(key => {
+        const previous = originalValues.get(key);
+        if (previous === null && typeof storage.removeItem === "function") storage.removeItem(key);
+        else storage.setItem(key, previous);
+      });
+      throw error;
+    }
+  }
+
   function runMigration(storage = globalScope.localStorage, now = new Date().toISOString()) {
     if (!storage) {
       return { status: "failed", migrated: false, error: "Browser storage is unavailable." };
@@ -345,6 +393,7 @@ verified local data.
     if (installation.type === "current" && existingStatus?.status === "completed" && existingBackup && existingCandidate) {
       try {
         validateCandidate(existingCandidate, existingBackup.rawEntries || {});
+        const restoredKeys = rehydrateValidatedCandidate(storage, existingCandidate, existingBackup);
         const marker = advanceReleaseMarker(storage, installation.marker, now);
         return {
           ...existingStatus,
@@ -352,6 +401,7 @@ verified local data.
           versionMarker: marker,
           migrated: false,
           reusedVerifiedMigration: true,
+          restoredKeys,
           migrationComplete: existingStatus.syncVerificationStatus === "verified"
         };
       } catch (error) {
@@ -523,6 +573,7 @@ verified local data.
     validateVersionMarker,
     stableHash,
     validateCandidate,
+    rehydrateValidatedCandidate,
     runMigration,
     markSupabaseSyncVerified,
     markSupabaseSyncFailed

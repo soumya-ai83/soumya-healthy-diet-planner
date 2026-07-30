@@ -75,9 +75,41 @@ test("wires category refresh after recipe and ingredient changes", () => {
   assert.ok((script.match(/refreshCategoryViews\(\);/g) || []).length >= 6);
 });
 
-test("advances the offline app shell for Version 1.4B", () => {
-  assert.match(serviceWorker, /v1\.4b-recipe-ingredient-fab/);
-  ["./js/storage.js", "./js/data.js", "./js/ingredients.js", "./js/script.js"].forEach(asset =>
+test("advances the offline app shell for Version 1.4C", () => {
+  assert.match(serviceWorker, /v1\.4c-ingredient-sync-fix/);
+  ["./js/storage.js", "./js/data.js", "./js/ingredients.js", "./js/config.js", "./js/sync.js", "./js/script.js"].forEach(asset =>
     assert.ok(serviceWorker.includes(asset), `Missing ${asset} from app shell`)
   );
+});
+
+test("filters saved recipes by partial name and category inside Add Meal", () => {
+  [
+    'id="meal-recipe-search"',
+    'id="meal-recipe-category-filter"',
+    'id="meal-recipe-result-count"'
+  ].forEach(marker => assert.ok(html.includes(marker), `Missing ${marker}`));
+  assert.match(script, /addEventListener\("input", loadRecipeOptions\)/);
+  assert.match(script, /toLocaleLowerCase\(\)\.includes\(searchText\)/);
+  assert.match(script, /recipe\.category === categorySelect\.value/);
+  assert.match(css, /\.meal-recipe-filters\s*\{/);
+});
+
+test("gates shared sync after a failed migration and persists cloud state safely", () => {
+  assert.match(script, /window\.SHDPMigrationResult\?\.status !== "failed"/);
+  assert.match(script, /SHDPIngredients\.assertValidCollection\(nextIngredients\)/);
+  assert.match(script, /Shared records could not be verified after local persistence/);
+  assert.match(script, /previousRecipesRaw[\s\S]*?previousIngredientsRaw[\s\S]*?throw error/);
+});
+
+test("queues both automatic and manual ingredient creation through the common shared path", () => {
+  assert.match(script, /ingredientExpansion\.created\.forEach\(ingredient => queueSharedMutation\("ingredient", ingredient\)\)/);
+  assert.match(script, /SHDPIngredients\.createIngredient[\s\S]*?queueSharedMutation\("ingredient", result\.ingredient\)/);
+});
+
+test("reports safe development diagnostics while retaining failed shared changes", () => {
+  assert.match(script, /SHDPSharedSync\.readOutbox\(localStorage\)/);
+  assert.match(script, /console\.error\("\[V1\.4C Sync\] Shared synchronization failed; queued changes were retained\."/);
+  assert.match(script, /pendingCount/);
+  assert.match(script, /pendingEntities/);
+  assert.doesNotMatch(script, /console\.(?:log|warn|error)\([^)]*supabaseAnonKey/);
 });

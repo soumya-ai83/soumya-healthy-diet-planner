@@ -203,6 +203,13 @@ button:disabled{opacity:.48;cursor:not-allowed}
 .remove-item-button:hover,.delete-meal-button:hover,.recipe-delete-button:hover{background:var(--danger-bg)}
 
 .form-group{gap:5px}
+.meal-recipe-filters{
+  display:grid;
+  grid-template-columns:minmax(0,2fr) minmax(150px,1fr);
+  gap:12px;
+  margin-bottom:12px;
+}
+.field-hint{color:var(--text-secondary);font-size:.75rem}
 .form-group label{
   color:var(--text-secondary);
   font-size:.8rem;
@@ -380,6 +387,8 @@ button:disabled{opacity:.48;cursor:not-allowed}
 }
 
 @media(max-width:800px){
+  .meal-recipe-filters{grid-template-columns:1fr;gap:8px}
+  .meal-recipe-filters input,.meal-recipe-filters select{min-height:48px}
   .app-header{padding:20px 16px}
   .header-content{align-items:center}
   .today-box{display:flex}
