@@ -186,7 +186,7 @@ test("restores missing private Version 1.3 history from the validated candidate 
   const originalMeals = storage.getItem(storageApi.VERSION_13_STORAGE.meals);
   const originalWeights = storage.getItem(storageApi.VERSION_13_STORAGE.weightHistory);
   const liveSettings = JSON.stringify({ dailyCalorieTarget: 1800, currentWeight: 187, goalWeight: 170 });
-  storage.setItem(storageApi.VERSION_13_STORAGE.meals, "[]");
+  storage.removeItem(storageApi.VERSION_13_STORAGE.meals);
   storage.removeItem(storageApi.VERSION_13_STORAGE.weightHistory);
   storage.setItem(storageApi.VERSION_13_STORAGE.settings, liveSettings);
 
@@ -276,4 +276,60 @@ test("does not accept synchronization completion without read-back evidence", ()
   const status = JSON.parse(storage.getItem(storageApi.MIGRATION_STORAGE.status));
   assert.equal(status.migrationComplete, false);
   assert.equal(status.syncVerificationStatus, "pending");
+});
+
+test("migration recovery preserves intentional empty primary arrays and objects", () => {
+  const storage = new MemoryStorage(version13Fixture());
+  storageApi.runMigration(storage, "2026-07-28T00:00:00.000Z");
+  const empty = {
+    [storageApi.VERSION_13_STORAGE.meals]: "[]",
+    [storageApi.VERSION_13_STORAGE.recipes]: "[]",
+    [storageApi.VERSION_13_STORAGE.weightHistory]: "[]",
+    [storageApi.VERSION_13_STORAGE.settings]: "{}",
+    [storageApi.VERSION_13_STORAGE.metadata]: "{}"
+  };
+  Object.entries(empty).forEach(([key, value]) => storage.setItem(key, value));
+  const result = storageApi.runMigration(storage, "2026-10-01T00:00:00.000Z");
+  assert.equal(result.reusedVerifiedMigration, true);
+  assert.deepEqual(result.restoredKeys, []);
+  for (const [key, raw] of Object.entries(empty)) assert.equal(storage.getItem(key), raw);
+});
+
+test("migration recovery never rewrites corrupt existing primary data", () => {
+  const storage = new MemoryStorage(version13Fixture());
+  storageApi.runMigration(storage);
+  storage.setItem(storageApi.VERSION_13_STORAGE.meals, "malformed original");
+  const result = storageApi.runMigration(storage);
+  assert.equal(result.reusedVerifiedMigration, true);
+  assert.equal(storage.getItem(storageApi.VERSION_13_STORAGE.meals), "malformed original");
+});
+
+test("unreadable application storage stops migration without rewriting data or leaking error contents", () => {
+  const storage = new MemoryStorage(version13Fixture());
+  const before = new Map(storage.entries);
+  storage.getItem = () => { throw new Error("PRIVATE error content"); };
+  const result = storageApi.runMigration(storage);
+  assert.equal(result.status, "failed");
+  assert.equal(result.failureType, "storage-read-error");
+  assert.equal(result.cloudSyncAllowed, false);
+  assert.deepEqual(storage.entries, before);
+  assert.ok(!JSON.stringify(result).includes("PRIVATE"));
+});
+
+test("V1.4C marker and populated schema-2 data remain compatible without changing release or schema", () => {
+  const storage = new MemoryStorage(version13Fixture());
+  storageApi.runMigration(storage);
+  const markerBefore = storage.getItem(storageApi.MIGRATION_STORAGE.versionMarker);
+  const sourceBefore = snapshotVersion13Source(storage);
+  const backupBefore = storage.getItem(storageApi.MIGRATION_STORAGE.backup);
+  for (let count = 0; count < 3; count += 1) {
+    const result = storageApi.runMigration(storage);
+    assert.equal(result.migrated, false);
+    assert.equal(result.reusedVerifiedMigration, true);
+    assert.deepEqual(snapshotVersion13Source(storage), sourceBefore);
+    assert.equal(storage.getItem(storageApi.MIGRATION_STORAGE.backup), backupBefore);
+    assert.equal(storage.getItem(storageApi.MIGRATION_STORAGE.versionMarker), markerBefore);
+  }
+  assert.equal(storageApi.TARGET_RELEASE, "1.4C");
+  assert.equal(storageApi.TARGET_SCHEMA_VERSION, 2);
 });

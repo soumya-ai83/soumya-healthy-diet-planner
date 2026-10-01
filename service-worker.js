@@ -1,10 +1,11 @@
-const CACHE_VERSION = "v1.5-recipe-serving-scaler"; // Bump this value whenever app-shell assets change.
+const CACHE_VERSION = "v1.5-recipe-serving-scaler-safety-1"; // Bump this value whenever app-shell assets change.
 const CACHE_PREFIX = "soumya-healthy-diet-";
 const SHELL_CACHE = `${CACHE_PREFIX}${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}${CACHE_VERSION}-runtime`;
 const MAX_RUNTIME_ENTRIES = 60;
 
-const APP_SHELL = [
+// Every listed asset is required for the installed/offline application.
+const REQUIRED_APP_SHELL = [
   "./",
   "./index.html",
   "./css/style.css",
@@ -26,12 +27,17 @@ const APP_SHELL = [
 
 async function precacheAppShell() {
   const cache = await caches.open(SHELL_CACHE);
-  const results = await Promise.allSettled(APP_SHELL.map(asset => cache.add(asset)));
-  results.forEach((result, index) => {
-    if (result.status === "rejected") {
-      console.warn(`[PWA] Could not precache ${APP_SHELL[index]}`, result.reason);
-    }
-  });
+  // addAll rejects if any required download fails. No activation follows failure.
+  await cache.addAll(REQUIRED_APP_SHELL);
+  await assertRequiredShellComplete();
+}
+
+async function assertRequiredShellComplete() {
+  const cache = await caches.open(SHELL_CACHE);
+  const responses = await Promise.all(REQUIRED_APP_SHELL.map(asset => cache.match(asset)));
+  if (responses.some(response => !response || !response.ok)) {
+    throw new Error("Required application shell is incomplete.");
+  }
 }
 
 async function trimRuntimeCache() {
@@ -78,7 +84,8 @@ self.addEventListener("install", event => {
 
 self.addEventListener("activate", event => {
   event.waitUntil(
-    caches.keys()
+    assertRequiredShellComplete()
+      .then(() => caches.keys())
       .then(keys => Promise.all(
         keys
           .filter(key => key.startsWith(CACHE_PREFIX) && key !== SHELL_CACHE && key !== RUNTIME_CACHE)

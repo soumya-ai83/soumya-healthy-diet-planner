@@ -289,18 +289,6 @@ verified local data.
     });
   }
 
-  function isEmptyStoredValue(rawValue, expectedType) {
-    if (rawValue === null) return true;
-    let parsed;
-    try {
-      parsed = JSON.parse(rawValue);
-    } catch (error) {
-      return false;
-    }
-    if (expectedType === "array") return Array.isArray(parsed) && parsed.length === 0;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length === 0;
-  }
-
   function rehydrateValidatedCandidate(storage, candidate, backup) {
     validateCandidate(candidate, backup?.rawEntries || {});
     const recoveryFields = [
@@ -319,7 +307,8 @@ verified local data.
         const protectedHasData = expectedType === "array"
           ? Array.isArray(protectedValue) && protectedValue.length > 0
           : protectedValue && typeof protectedValue === "object" && Object.keys(protectedValue).length > 0;
-        if (!protectedHasData || !isEmptyStoredValue(liveRaw, expectedType)) return;
+        // Empty arrays/objects are intentional live data, not missing records.
+        if (!protectedHasData || liveRaw !== null) return;
         originalValues.set(key, liveRaw);
         const serialized = JSON.stringify(protectedValue);
         storage.setItem(key, serialized);
@@ -342,8 +331,14 @@ verified local data.
       return { status: "failed", migrated: false, error: "Browser storage is unavailable." };
     }
 
-    const originalEntries = captureApplicationEntries(storage);
-    const installation = detectInstallation(storage, originalEntries);
+    let originalEntries;
+    let installation;
+    try {
+      originalEntries = captureApplicationEntries(storage);
+      installation = detectInstallation(storage, originalEntries);
+    } catch (error) {
+      return migrationReadFailure();
+    }
     if (installation.type === "invalid") {
       return {
         status: "failed",
@@ -387,9 +382,16 @@ verified local data.
       }
     }
 
-    const existingStatus = readJson(storage, MIGRATION_STORAGE.status);
-    const existingBackup = readJson(storage, MIGRATION_STORAGE.backup);
-    const existingCandidate = readJson(storage, MIGRATION_STORAGE.candidate);
+    let existingStatus;
+    let existingBackup;
+    let existingCandidate;
+    try {
+      existingStatus = readJson(storage, MIGRATION_STORAGE.status);
+      existingBackup = readJson(storage, MIGRATION_STORAGE.backup);
+      existingCandidate = readJson(storage, MIGRATION_STORAGE.candidate);
+    } catch (error) {
+      return migrationReadFailure();
+    }
     if (installation.type === "current" && existingStatus?.status === "completed" && existingBackup && existingCandidate) {
       try {
         validateCandidate(existingCandidate, existingBackup.rawEntries || {});
@@ -579,8 +581,20 @@ verified local data.
     markSupabaseSyncFailed
   });
 
+  function migrationReadFailure() {
+    return {
+      status: "failed", migrated: false, cloudSyncAllowed: false,
+      migrationComplete: false, failureType: "storage-read-error",
+      error: "Application storage could not be read safely."
+    };
+  }
+
   globalScope.SHDPStorage = api;
-  if (globalScope.localStorage) globalScope.SHDPMigrationResult = runMigration(globalScope.localStorage);
+  try {
+    if (globalScope.localStorage) globalScope.SHDPMigrationResult = runMigration(globalScope.localStorage);
+  } catch (error) {
+    globalScope.SHDPMigrationResult = migrationReadFailure();
+  }
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : window);

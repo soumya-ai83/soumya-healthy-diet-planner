@@ -12,6 +12,9 @@ const STORAGE = {
   weightHistory: "soumyaHealthyDietWeightHistory",
   metadata: "soumyaHealthyDietMetadata"
 };
+// A failed read stays protected for this session, even if a later read succeeds.
+const storageReadState = new Map();
+const failedStorageReads = new Map();
 
 const defaultSettings = {
   dailyCalorieTarget: 1900,
@@ -22,12 +25,15 @@ const defaultSettings = {
 
 let applicationSettings = normalizeSettings(loadJson(STORAGE.settings, defaultSettings));
 let savedMeals = normalizeMealCollection(loadJson(STORAGE.meals, []));
-const starterRecipeMerge = mergeMissingStarterRecipes(loadJson(STORAGE.recipes, recipeDatabase));
+const loadedRecipes = loadJson(STORAGE.recipes, recipeDatabase);
+const starterRecipeMerge = storageReadState.get(STORAGE.recipes) === "valid-empty"
+  ? { recipes: loadedRecipes, changed: false }
+  : mergeMissingStarterRecipes(loadedRecipes);
 let savedRecipes = starterRecipeMerge.recipes;
-if (starterRecipeMerge.changed || !localStorage.getItem(STORAGE.recipes)) localStorage.setItem(STORAGE.recipes, JSON.stringify(savedRecipes));
+if (starterRecipeMerge.changed || storageReadState.get(STORAGE.recipes) === "missing") writeProtectedJson(STORAGE.recipes, savedRecipes);
 let weightHistory = normalizeWeightCollection(loadJson(STORAGE.weightHistory, []));
 let applicationMetadata = normalizeMetadata(loadJson(STORAGE.metadata, {}));
-const ingredientStore = window.SHDPIngredients?.initialize(localStorage, ingredientDatabase);
+const ingredientStore = initializeIngredientStore();
 const activeIngredientDatabase = ingredientStore?.ingredients || ingredientDatabase;
 let currentMealItems = [];
 let ingredientRowCounter = 0;
@@ -81,15 +87,62 @@ function escapeHtml(value) {
 }
 
 function loadJson(key, fallback) {
+  let failureType = "read-error";
   try {
     const raw = localStorage.getItem(key);
-    if (!raw) return structuredCloneSafe(fallback);
+    if (raw === null) {
+      if (!failedStorageReads.has(key)) storageReadState.set(key, "missing");
+      return structuredCloneSafe(fallback);
+    }
+    failureType = "invalid-json";
     const parsed = JSON.parse(raw);
-    return parsed ?? structuredCloneSafe(fallback);
+    failureType = "invalid-structure";
+    const valid = Array.isArray(fallback)
+      ? Array.isArray(parsed)
+      : parsed !== null && typeof parsed === "object" && !Array.isArray(parsed);
+    if (!valid) throw new Error("Unexpected storage structure.");
+    if (!failedStorageReads.has(key)) storageReadState.set(key, Object.keys(parsed).length === 0 ? "valid-empty" : "valid");
+    return parsed;
   } catch (error) {
-    console.error(`Unable to load ${key}`, error);
+    storageReadState.set(key, "read-failed");
+    failedStorageReads.set(key, failureType);
+    console.error("[Storage] Dataset read failed; writes blocked.", { key, failureType });
     return structuredCloneSafe(fallback);
   }
+}
+
+function writeProtectedJson(key, value) {
+  if (failedStorageReads.has(key)) return false;
+  localStorage.setItem(key, JSON.stringify(value));
+  return true;
+}
+
+function canEditDataset(key) {
+  if (!failedStorageReads.has(key)) return true;
+  showMessage("This data could not be loaded safely. Saving is disabled to preserve the stored original.");
+  return false;
+}
+
+function initializeIngredientStore() {
+  try {
+    return window.SHDPIngredients?.initialize(localStorage, ingredientDatabase);
+  } catch (error) {
+    return { status: "failed", ingredients: ingredientDatabase };
+  }
+}
+
+function reportStorageReadFailures() {
+  if (!failedStorageReads.size) return;
+  const controls = [
+    [STORAGE.meals, "save-meal-button"],
+    [STORAGE.weightHistory, "save-weight-button"],
+    [STORAGE.settings, "save-settings-button"],
+    [STORAGE.recipes, "save-new-recipe-button"]
+  ];
+  controls.forEach(([key, id]) => { if (failedStorageReads.has(key)) $(id).disabled = true; });
+  // Bulk import/reset/export must not present fallback values as a complete dataset.
+  ["import-data-input", "reset-data-button", "export-data-button"].forEach(id => { $(id).disabled = true; });
+  showMessage("Some stored data could not be loaded. Saving that data is disabled; the stored originals were preserved.");
 }
 
 function structuredCloneSafe(value) {
@@ -256,11 +309,11 @@ function normalizeMetadata(metadata) {
 
 function saveAll() {
   applicationMetadata = { ...applicationMetadata, schemaVersion: SCHEMA_VERSION, updatedAt: new Date().toISOString() };
-  localStorage.setItem(STORAGE.meals, JSON.stringify(savedMeals));
-  localStorage.setItem(STORAGE.recipes, JSON.stringify(savedRecipes));
-  localStorage.setItem(STORAGE.settings, JSON.stringify(applicationSettings));
-  localStorage.setItem(STORAGE.weightHistory, JSON.stringify(weightHistory));
-  localStorage.setItem(STORAGE.metadata, JSON.stringify(applicationMetadata));
+  writeProtectedJson(STORAGE.meals, savedMeals);
+  writeProtectedJson(STORAGE.recipes, savedRecipes);
+  writeProtectedJson(STORAGE.settings, applicationSettings);
+  writeProtectedJson(STORAGE.weightHistory, weightHistory);
+  writeProtectedJson(STORAGE.metadata, applicationMetadata);
 }
 
 function queueSharedMutation(entity, record) {
@@ -285,7 +338,7 @@ function reportMigrationStatus() {
   const migration = window.SHDPMigrationResult;
   if (!migration) return;
   if (migration.status === "failed") {
-    console.error("[V1.4A Migration] Migration stopped safely.", migration.error);
+    console.error("[V1.4A Migration] Migration stopped safely.", { failureType: "migration-check-failed" });
     showMessage("Upgrade safety check failed. Version 1.3 data was preserved; synchronization is disabled.");
   } else if (migration.status === "completed" && migration.migrated) {
     showMessage("Version 1.3 data backup and migration safety checks passed.");
@@ -294,7 +347,7 @@ function reportMigrationStatus() {
 
 function reportIngredientStoreStatus() {
   if (ingredientStore?.status !== "failed") return;
-  console.error("[V1.4A Ingredients] Persistent Ingredient Master Database is unavailable.", ingredientStore.error);
+  console.error("[V1.4A Ingredients] Persistent Ingredient Master Database is unavailable.", { failureType: "ingredient-check-failed" });
   showMessage("Ingredient database safety check failed. Stored ingredient data was preserved.");
 }
 
@@ -594,6 +647,7 @@ $("cancel-meal-button").addEventListener("click", () => {
 });
 
 $("save-meal-button").addEventListener("click", () => {
+  if (!canEditDataset(STORAGE.meals)) return;
   if (isSavingMeal) return;
   const date = $("meal-date").value;
   const mealType = $("meal-type").value;
@@ -677,6 +731,7 @@ function editMeal(mealId) {
 }
 
 function deleteMeal(mealId) {
+  if (!canEditDataset(STORAGE.meals)) return;
   const meal = savedMeals.find(item => item.id === mealId);
   if (!meal) return;
   const dateLabel = meal.date ? formatDisplayDate(meal.date) : "its saved date";
@@ -959,6 +1014,7 @@ $("ignore-new-recipe-button").addEventListener("click", () => {
 });
 
 $("save-new-recipe-button").addEventListener("click", () => {
+  if (!canEditDataset(STORAGE.recipes)) return;
   if (isSavingRecipe) return;
   const name = $("new-recipe-name").value.trim();
   const foodType = $("food-type").value;
@@ -1205,6 +1261,7 @@ function openMealFromRecipe(recipeId) {
 }
 
 function deleteRecipe(recipeId) {
+  if (!canEditDataset(STORAGE.recipes)) return;
   const recipe = savedRecipes.find(item => item.id === recipeId);
   if (!recipe || !confirm(`Delete "${recipe.name}" from the Recipe Handbook? Historical meals already logged with this recipe will not be changed.`)) return;
   const deletedAt = new Date().toISOString();
@@ -1465,6 +1522,7 @@ $("save-ingredient-button").addEventListener("click", () => {
 
 // Weight tracking
 $("save-weight-button").addEventListener("click", () => {
+  if (!canEditDataset(STORAGE.weightHistory)) return;
   if (isSavingWeight) return;
   const date = $("weight-date").value;
   const weight = Number($("weight-value").value);
@@ -1577,6 +1635,7 @@ function renderLineChart({ container, points, referenceValue, referenceLabel, va
 }
 
 function renderWeightChart() {
+  if (failedStorageReads.has(STORAGE.weightHistory)) return emptyChart($("weight-chart-container"), "Weight data unavailable", "Stored history could not be loaded safely. The original was preserved.");
   const points = weightHistory
     .filter(record => record?.date && Number(record.weight) > 0)
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -1597,6 +1656,7 @@ function renderWeightChart() {
 }
 
 function renderCalorieChart() {
+  if (failedStorageReads.has(STORAGE.meals)) return emptyChart($("calorie-chart-container"), "Calorie data unavailable", "Stored meals could not be loaded safely. The original was preserved.");
   const totals = savedMeals.reduce((byDate, meal) => {
     if (meal?.date) byDate[meal.date] = (byDate[meal.date] || 0) + Number(meal.totalCalories || 0);
     return byDate;
@@ -1630,6 +1690,7 @@ function populateSettings() {
   $("goal-weight").value = applicationSettings.goalWeight;
 }
 $("save-settings-button").addEventListener("click", () => {
+  if (!canEditDataset(STORAGE.settings)) return;
   const target = Number($("daily-calorie-target").value);
   const current = Number($("current-weight").value);
   const goal = Number($("goal-weight").value);
@@ -1666,6 +1727,7 @@ function getBackupFilename() {
 }
 
 $("export-data-button").addEventListener("click", () => {
+  if (failedStorageReads.size) return reportStorageReadFailures();
   const blob = new Blob([JSON.stringify(buildBackupData(), null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1696,6 +1758,7 @@ function prepareImportedData(data) {
 }
 
 $("import-data-input").addEventListener("change", async event => {
+  if (failedStorageReads.size) return reportStorageReadFailures();
   const file = event.target.files?.[0];
   if (!file || isImportingData) return;
   isImportingData = true;
@@ -1726,6 +1789,7 @@ $("import-data-input").addEventListener("change", async event => {
 });
 
 $("reset-data-button").addEventListener("click", () => {
+  if (failedStorageReads.size) return reportStorageReadFailures();
   if (!confirm("Reset all application data? Meals and weight history will be cleared, recipes will return to the starter set, and settings will return to defaults.")) return;
   if (prompt('Type RESET to confirm. This action cannot be undone.') !== "RESET") {
     showMessage("Reset cancelled. Type RESET exactly to confirm.");
@@ -1757,6 +1821,7 @@ renderIngredientDatabase();
 renderWeeklyProgress();
 reportMigrationStatus();
 reportIngredientStoreStatus();
+reportStorageReadFailures();
 
 // Version 1.4C PWA support
 const INSTALL_PROMPT_DISMISSED_KEY = "soumyaHealthyDietInstallPromptDismissed";
@@ -1835,6 +1900,7 @@ window.addEventListener("appinstalled", () => {
 updateInstallAppUI();
 
 function applySharedState({ recipes, ingredients }) {
+  if (failedStorageReads.has(STORAGE.recipes)) throw new Error("Shared recipes cannot replace a dataset that failed to load.");
   const nextRecipes = normalizeRecipeCollection((recipes || []).filter(recipe => !recipe.deletedAt));
   const nextIngredients = Array.isArray(ingredients) ? ingredients : [];
   window.SHDPIngredients.assertValidCollection(nextIngredients);
@@ -1874,7 +1940,7 @@ function markInitialSharedSyncVerified(verification) {
   }
 }
 
-if (window.SHDPSharedSync && window.SHDPMigrationResult?.status !== "failed") {
+if (window.SHDPSharedSync && window.SHDPMigrationResult?.status !== "failed" && !failedStorageReads.has(STORAGE.recipes)) {
   sharedSyncManager = window.SHDPSharedSync.createManager({
     storage: localStorage,
     config: window.SHDP_CONFIG,
