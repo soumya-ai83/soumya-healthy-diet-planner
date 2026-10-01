@@ -75,8 +75,8 @@ test("wires category refresh after recipe and ingredient changes", () => {
   assert.ok((script.match(/refreshCategoryViews\(\);/g) || []).length >= 6);
 });
 
-test("advances the offline app shell for Version 1.4C", () => {
-  assert.match(serviceWorker, /v1\.4c-ingredient-sync-fix/);
+test("advances the offline app shell for Version 1.5", () => {
+  assert.match(serviceWorker, /v1\.5-recipe-serving-scaler/);
   ["./js/storage.js", "./js/data.js", "./js/ingredients.js", "./js/config.js", "./js/sync.js", "./js/script.js"].forEach(asset =>
     assert.ok(serviceWorker.includes(asset), `Missing ${asset} from app shell`)
   );

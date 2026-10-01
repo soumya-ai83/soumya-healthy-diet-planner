@@ -147,7 +147,7 @@ function normalizeRecipeRecord(recipe, index = 0) {
     name: String(normalized.name || "Untitled Recipe").trim(),
     foodType: String(normalized.foodType || "Unspecified").trim(),
     category: normalizeCategoryLabel(getRecipeCategoryValue(normalized)),
-    totalServings: Number(normalized.totalServings) > 0 ? Number(normalized.totalServings) : 1,
+    totalServings: Number.isFinite(Number(normalized.totalServings)) && Number(normalized.totalServings) > 0 ? Number(normalized.totalServings) : 1,
     totalCalories: Number(normalized.totalCalories) || 0,
     caloriesPerServing: Number(normalized.caloriesPerServing) || 0,
     totalProtein: normalized.totalProtein == null ? null : Number(normalized.totalProtein) || 0,
@@ -155,7 +155,7 @@ function normalizeRecipeRecord(recipe, index = 0) {
     ingredients: Array.isArray(normalized.ingredients)
       ? normalized.ingredients.map(ingredient => ({
           name: String(ingredient?.name || "Unnamed ingredient").trim(),
-          quantity: ingredient?.quantity == null ? null : Number(ingredient.quantity) || 0,
+          quantity: ingredient?.quantity == null ? null : parseRecipeQuantity(ingredient.quantity) ?? ingredient.quantity,
           unit: String(ingredient?.unit || "").trim(),
           calories: Number(ingredient?.calories) || 0
         }))
@@ -1226,25 +1226,75 @@ function deleteRecipe(recipeId) {
   showMessage(`${recipe.name} deleted. Historical meals were preserved.`);
 }
 
+// Strict decimal parsing: descriptions and mixed quantities are never guessed.
+function parseRecipeQuantity(value) {
+  if (typeof value !== "number" && !(typeof value === "string" && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value.trim()))) return null;
+  const quantity = Number(value);
+  return Number.isFinite(quantity) ? quantity : null;
+}
+
+function recipeServingBaseline(recipe) {
+  const value = Number(recipe.totalServings);
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+function formatRecipeQuantity(ingredient, targetServings, defaultServings) {
+  if (ingredient.quantity == null) return "Quantity unspecified";
+  const original = parseRecipeQuantity(ingredient.quantity);
+  const quantity = original === null ? String(ingredient.quantity)
+    : (original * targetServings / defaultServings).toLocaleString("en-US", { maximumFractionDigits: 3 });
+  return `${escapeHtml(quantity)} ${escapeHtml(ingredient.unit || "")}`;
+}
+
 function showRecipeDetails(recipeId) {
   const recipe = savedRecipes.find(item => item.id === recipeId);
   if (!recipe) return showMessage("The selected recipe could not be found.");
   selectedRecipeDetailsId = recipe.id;
   $("recipe-details-title").textContent = recipe.name;
+  const defaultServings = recipeServingBaseline(recipe);
+  let targetServings = defaultServings;
+  renderRecipeDetails(recipe, targetServings, defaultServings);
+  const selector = $("recipe-target-servings");
+  selector.addEventListener("change", () => {
+    const next = Number(selector.value);
+    if (!Number.isInteger(next) || next < 1 || next > 10) {
+      selector.value = String(targetServings);
+      return;
+    }
+    targetServings = next;
+    // Update only the measured information; preserve focus on the native select.
+    $("recipe-scaled-ingredients").innerHTML = recipeIngredientsMarkup(recipe, targetServings, defaultServings);
+    $("recipe-scaled-total-calories").textContent = formatCalories(
+      targetServings === defaultServings ? recipe.totalCalories : recipe.caloriesPerServing * targetServings);
+  });
+  openDialog("recipe-details-dialog");
+}
+
+function recipeIngredientsMarkup(recipe, targetServings, defaultServings) {
+  const factor = targetServings / defaultServings;
   const ingredientsMarkup = Array.isArray(recipe.ingredients) && recipe.ingredients.length
     ? `<ul class="recipe-detail-ingredients">${recipe.ingredients.map(ingredient => `
-        <li class="recipe-detail-ingredient"><strong>${escapeHtml(ingredient.name)}</strong><span>${ingredient.quantity == null ? "Quantity unspecified" : `${Number(ingredient.quantity).toLocaleString("en-US")} ${escapeHtml(ingredient.unit || "")}`}</span><span>${formatCalories(ingredient.calories)}</span></li>`).join("")}</ul>`
+        <li class="recipe-detail-ingredient"><strong>${escapeHtml(ingredient.name)}</strong><span>${formatRecipeQuantity(ingredient, targetServings, defaultServings)}</span><span>${formatCalories(ingredient.calories * factor)}</span></li>`).join("")}</ul>`
     : '<div class="older-recipe-message">Ingredient details are not available for this older recipe.</div>';
+  return ingredientsMarkup;
+}
+
+function renderRecipeDetails(recipe, targetServings, defaultServings) {
+  const options = Array.from({ length: 10 }, (_, index) => index + 1);
+  // Preserve unusual legacy baselines on opening, but offer only integer targets 1–10.
+  if (!options.includes(defaultServings)) options.unshift(defaultServings);
   $("recipe-details-content").innerHTML = `
     <div class="recipe-details-summary">
       <div class="recipe-detail-stat"><span>Food Type</span><strong>${escapeHtml(recipe.foodType)}</strong></div>
       <div class="recipe-detail-stat"><span>Category</span><strong>${escapeHtml(recipe.category)}</strong></div>
       <div class="recipe-detail-stat"><span>Calories per Serving</span><strong>${formatCalories(recipe.caloriesPerServing)}</strong></div>
-      <div class="recipe-detail-stat"><span>Total Calories</span><strong>${formatCalories(recipe.totalCalories)}</strong></div>
-      <div class="recipe-detail-stat"><span>Total Servings</span><strong>${recipe.totalServings}</strong></div>
+      <div class="recipe-detail-stat"><span>Total Calories</span><strong id="recipe-scaled-total-calories">${formatCalories(recipe.totalCalories)}</strong></div>
+      <div class="recipe-detail-stat"><span>Total Servings</span><strong>Default: ${defaultServings}</strong>
+        <label class="recipe-serving-label" for="recipe-target-servings">Prepare for:</label>
+        <select id="recipe-target-servings" class="recipe-serving-select">${options.map(value => `<option value="${value}"${value === targetServings ? " selected" : ""}${!Number.isInteger(value) || value > 10 ? " disabled" : ""}>${value}</option>`).join("")}</select>
+      </div>
     </div>
-    <section class="recipe-details-section"><h3>Ingredients</h3>${ingredientsMarkup}</section>`;
-  openDialog("recipe-details-dialog");
+    <section class="recipe-details-section"><h3>Ingredients</h3><div id="recipe-scaled-ingredients" aria-live="polite">${recipeIngredientsMarkup(recipe, targetServings, defaultServings)}</div></section>`;
 }
 
 $("edit-recipe-from-details-button").addEventListener("click", () => {
